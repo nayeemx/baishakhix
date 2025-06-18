@@ -1,15 +1,18 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { logoutUser } from "../redux/features/authSlice";
 import Logo from "../assets/logo.png";
 import { FaUserCircle, FaMoon, FaSun } from "react-icons/fa";
 import { toggleTheme } from "../redux/features/themeSlice";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import Loader from "./Loader";
 
 const Header = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { user, loading } = useSelector((state) => state.auth);
   const darkMode = useSelector((state) => state.theme.darkMode);
+  const [redirectLoading, setRedirectLoading] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -18,6 +21,28 @@ const Header = () => {
       document.documentElement.classList.remove("dark");
     }
   }, [darkMode]);
+
+  const handleLogoClick = () => {
+    setRedirectLoading(true);
+    // If user is super_user, go to dashboard, otherwise go to home
+    if (user?.role === "super_user") {
+      navigate("/dashboard");
+    } else {
+      navigate("/");
+    }
+    // Add small delay to show loader
+    setTimeout(() => {
+      setRedirectLoading(false);
+    }, 500);
+  };
+
+  if (redirectLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <header
@@ -28,9 +53,12 @@ const Header = () => {
       }`}
     >
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-y-4">
-        <Link to="/" className="flex justify-center md:justify-start">
+        <div
+          className="flex justify-center md:justify-start cursor-pointer"
+          onClick={handleLogoClick}
+        >
           <img src={Logo} alt="Logo" className="w-[70%] h-auto md:w-[150px]" />
-        </Link>
+        </div>
 
         <nav className="flex flex-col md:flex-row justify-center md:justify-end items-center space-x-4">
           <div className="flex items-center space-x-3 my-2">

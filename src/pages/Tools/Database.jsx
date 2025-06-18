@@ -11,19 +11,24 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { toast } from "react-toastify";
-import { FaTable, FaTrashAlt, FaSpinner, FaDatabase, FaExclamationCircle } from "react-icons/fa";
+import { FaTable, FaTrashAlt, FaSpinner, FaDatabase, FaExclamationCircle, FaFileCsv, FaFileExcel, FaFileCode } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import debounce from "lodash.debounce";
 import GenericDeleteComponent from '../../components/GenericDeleteComponent';
+import * as XLSX from "xlsx";
+import Papa from "papaparse";
+import { saveAs } from "file-saver";
 
 // List your known Firestore collections here
 const KNOWN_COLLECTIONS = [
   "products",
   "supplier_list",
+  "supplier_transaction",
   "uploads",
   "users",
   "delete_traces",
   "product_units",
+  "supplier_adjustment",
   // Add more collection names here as your app grows
 ];
 
@@ -255,6 +260,54 @@ const Database = () => {
     );
   }, [tableData, searchQuery]);
 
+  const exportTableAsCSV = () => {
+    if (!selectedTable || tableData.length === 0) return;
+    const csv = Papa.unparse(tableData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    saveAs(blob, `${selectedTable}.csv`);
+  };
+
+  const exportTableAsXLSX = () => {
+    if (!selectedTable || tableData.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(tableData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, selectedTable);
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    saveAs(new Blob([wbout], { type: "application/octet-stream" }), `${selectedTable}.xlsx`);
+  };
+
+  const exportTableAsJSON = () => {
+    if (!selectedTable || tableData.length === 0) return;
+    const json = JSON.stringify(tableData, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    saveAs(blob, `${selectedTable}.json`);
+  };
+
+  const exportAllTablesAsXLSX = async () => {
+    const wb = XLSX.utils.book_new();
+    for (const table of tables) {
+      const docsSnap = await getDocs(collection(firestore, table));
+      const data = docsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (data.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, table);
+      }
+    }
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    saveAs(new Blob([wbout], { type: "application/octet-stream" }), `firestore-database.xlsx`);
+  };
+
+  const exportAllTablesAsJSON = async () => {
+    const allData = {};
+    for (const table of tables) {
+      const docsSnap = await getDocs(collection(firestore, table));
+      allData[table] = docsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+    const json = JSON.stringify(allData, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    saveAs(blob, `firestore-database.json`);
+  };
+
   return (
     <div className="min-h-screen">
       {notification.show && (
@@ -293,7 +346,65 @@ const Database = () => {
       />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Firestore Database Viewer</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold mb-6">Firestore Database Viewer</h1>
+        <div className="mb-4 flex gap-2">
+          {/* csv */}
+          <button
+            className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            onClick={exportTableAsCSV}
+            disabled={!selectedTable || tableData.length === 0}
+            title="Export Current Table as CSV"
+          >
+            <FaFileCsv className="text-xl" />
+          </button>
+          {/* excel */}
+          <button
+            className="p-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+            onClick={exportTableAsXLSX}
+            disabled={!selectedTable || tableData.length === 0}
+            title="Export Current Table as Excel"
+          >
+            <FaFileExcel className="text-xl" />
+          </button>
+          {/* json */}
+          <button
+            className="p-2 bg-gray-700 text-white rounded hover:bg-gray-800 transition-colors"
+            onClick={exportTableAsJSON}
+            disabled={!selectedTable || tableData.length === 0}
+            title="Export Current Table as JSON"
+          >
+            <FaFileCode className="text-xl" />
+          </button>
+          {/* divider */}
+          <div className="w-px h-8 bg-gray-300 mx-2" />
+          {/* Export All Tables */}
+          {/* export all tables xlsx */}
+          <button
+            className="p-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
+            onClick={exportAllTablesAsXLSX}
+            disabled={tables.length === 0}
+            title="Export All Tables as Excel"
+          >
+            <div className="flex items-center">
+              <FaDatabase className="text-lg mr-1" />
+              <FaFileExcel className="text-xl" />
+            </div>
+          </button>
+          {/* export all tables json */}
+          <button
+            className="p-2 bg-gray-900 text-white rounded hover:bg-black transition-colors"
+            onClick={exportAllTablesAsJSON}
+            disabled={tables.length === 0}
+            title="Export All Tables as JSON"
+          >
+            <div className="flex items-center">
+              <FaDatabase className="text-lg mr-1" />
+              <FaFileCode className="text-xl" />
+            </div>
+          </button>
+        </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Tables */}

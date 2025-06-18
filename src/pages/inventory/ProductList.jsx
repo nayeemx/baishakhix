@@ -67,6 +67,49 @@ async function fetchAllSuppliers() {
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
 }
 
+const createSearchIndex = (products) => {
+  // Create inverted index for faster text search
+  const searchIndex = new Map();
+  
+  products.forEach((product, idx) => {
+    const searchableFields = [
+      product.product,
+      product.barcode,
+      product.sku,
+      product.quantity, 
+      product.product_category,
+      product.product_type,
+      product.brand,
+      product.origin,
+      product.bill_number
+    ].filter(Boolean);
+
+    searchableFields.forEach(field => {
+      const tokens = field.toLowerCase().split(/\s+/);
+      tokens.forEach(token => {
+        if (!searchIndex.has(token)) {
+          searchIndex.set(token, new Set());
+        }
+        searchIndex.get(token).add(idx);
+      });
+    });
+  });
+
+  return searchIndex;
+};
+
+function getSupplierByBillNumber(billNumber, products, suppliersList) {
+  const product = products.find(p => p.bill_number === billNumber);
+  if (!product) return null;
+  return suppliersList.find(s => s.id === product.supplier_id) || null;
+}
+
+function getBillNumbersBySupplierId(supplierId, products) {
+  return Array.from(
+    new Set(products.filter(p => p.supplier_id === supplierId).map(p => p.bill_number).filter(Boolean))
+  );
+}
+
 const ProductList = () => {
   const currentUser = useSelector(state => state.auth?.user)
   const [columnVisibility, setColumnVisibility] = useState({})
@@ -90,6 +133,8 @@ const ProductList = () => {
     toDate: '',
   })
   const [pageInput, setPageInput] = useState('')
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [selectedBillNumber, setSelectedBillNumber] = useState('');
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
@@ -118,6 +163,56 @@ const ProductList = () => {
     }
   }, [filteredProducts, suppliersList])
 
+  // Create memoized search index
+  const searchIndex = useMemo(() => 
+    createSearchIndex(filteredProducts), 
+    [filteredProducts]
+  );
+
+  // Create memoized lookup maps for faster filtering
+  const lookupMaps = useMemo(() => ({
+    categories: new Set(filteredProducts.map(p => p.product_category).filter(Boolean)),
+    types: new Set(filteredProducts.map(p => p.product_type).filter(Boolean)),
+    brands: new Set(filteredProducts.map(p => p.brand).filter(Boolean)),
+    origins: new Set(filteredProducts.map(p => p.origin).filter(Boolean)),
+    billNumbers: new Set(filteredProducts.map(p => p.bill_number).filter(Boolean)),
+    supplierProducts: new Map(
+      filteredProducts.map(p => [p.supplier_id, true])
+    )
+  }), [filteredProducts]);
+
+  // Optimized search function
+  const searchProducts = useCallback((query, products) => {
+    if (!query) return products;
+
+    // Tokenize and deduplicate tokens
+    const tokens = Array.from(new Set(query.toLowerCase().split(/\s+/).filter(Boolean)));
+    if (tokens.length === 0) return products;
+
+    // Use the searchIndex to get sets of matching indices for each token
+    let matchingIndices = null;
+    for (const token of tokens) {
+      const matches = searchIndex.get(token) || new Set();
+      if (matchingIndices === null) {
+        matchingIndices = new Set(matches);
+      } else {
+        // Intersect sets for AND search
+        for (const idx of matchingIndices) {
+          if (!matches.has(idx)) {
+            matchingIndices.delete(idx);
+          }
+        }
+      }
+      // Early exit if no matches
+      if (matchingIndices.size === 0) break;
+    }
+
+    // Return products by index
+    return matchingIndices && matchingIndices.size > 0
+      ? Array.from(matchingIndices).map(idx => products[idx])
+      : [];
+  }, [searchIndex]);
+
   // Debounced global filter using useCallback and lodash.debounce
   const debouncedSetGlobalFilter = useMemo(
     () => debounce((value) => setGlobalFilter(value), 300),
@@ -133,8 +228,14 @@ const ProductList = () => {
   // Table data (apply UI filters to filteredProducts) with efficient Set-based filtering for dropdowns
   const tableData = useMemo(() => {
     let data = filteredProducts
-    if (filters.category) data = data.filter(p => p.product_category === filters.category)
-    if (filters.type) data = data.filter(p => p.product_type === filters.type)
+
+    // Apply filters using Set lookups (O(1) operations)
+    if (filters.category) {
+      data = data.filter(p => p.product_category === filters.category);
+    }
+    if (filters.type) {
+      data = data.filter(p => p.product_type === filters.type);
+    }
     if (filters.brand) data = data.filter(p => p.brand === filters.brand)
     if (filters.origin) data = data.filter(p => p.origin === filters.origin)
     if (filters.bill_number) data = data.filter(p => p.bill_number === filters.bill_number)
@@ -147,25 +248,13 @@ const ProductList = () => {
       const to = new Date(filters.toDate)
       data = data.filter(p => p.created_at && new Date(p.created_at) <= to)
     }
+    // Apply search using inverted index
     if (globalFilter) {
-      const lower = globalFilter.toLowerCase()
-      // Use Set for unique search fields
-      data = data.filter(p => {
-        const fields = [
-          p.product,
-          p.barcode,
-          p.sku,
-          p.product_category,
-          p.product_type,
-          p.brand,
-          p.origin,
-          p.bill_number,
-        ]
-        return fields.some(field => field && field.toString().toLowerCase().includes(lower))
-      })
+      data = searchProducts(globalFilter, data);
     }
+
     return data
-  }, [filteredProducts, filters, globalFilter])
+  }, [filteredProducts, filters, globalFilter, searchProducts])
 
   // Debug: log dropdown options and filteredProducts count
   useEffect(() => {
@@ -466,6 +555,33 @@ const ProductList = () => {
     return `Generated Report: ${day} ${date} ${month} ${year} | ${hour}.${minute} ${ampm}`;
   }
 
+  // When bill number changes, update supplier selection
+  useEffect(() => {
+    if (selectedBillNumber) {
+      const supplier = getSupplierByBillNumber(selectedBillNumber, filteredProducts, suppliersList);
+      if (supplier) setSelectedSupplierId(supplier.id);
+    }
+  }, [selectedBillNumber, filteredProducts, suppliersList]);
+
+  // When supplier changes, update bill number selection if current bill is not related
+  useEffect(() => {
+    if (selectedSupplierId) {
+      const bills = getBillNumbersBySupplierId(selectedSupplierId, filteredProducts);
+      if (selectedBillNumber && !bills.includes(selectedBillNumber)) {
+        setSelectedBillNumber('');
+      }
+    }
+  }, [selectedSupplierId, selectedBillNumber, filteredProducts]);
+
+  // Update filters when dropdowns change
+  useEffect(() => {
+    setFilters(f => ({
+      ...f,
+      supplier_id: selectedSupplierId,
+      bill_number: selectedBillNumber,
+    }));
+  }, [selectedSupplierId, selectedBillNumber]);
+
   if (isLoading) return (
     <div className="relative top-[40vh]">
       <Loader />
@@ -567,22 +683,26 @@ const ProductList = () => {
         </select>
         <select
           className="border p-2 rounded"
-          value={filters.bill_number}
-          onChange={e => setFilters(f => ({ ...f, bill_number: e.target.value }))}
-        >
-          <option value="">All Bill Numbers</option>
-          {filterOptions.bill_number.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
-        <select
-          className="border p-2 rounded"
-          value={filters.supplier_id}
-          onChange={e => setFilters(f => ({ ...f, supplier_id: e.target.value }))}
+          value={selectedSupplierId}
+          onChange={e => setSelectedSupplierId(e.target.value)}
         >
           <option value="">All Suppliers</option>
           {filterOptions.supplier.map(opt => (
             <option key={opt.id} value={opt.id}>{opt.name}</option>
+          ))}
+        </select>
+        <select
+          className="border p-2 rounded"
+          value={selectedBillNumber}
+          onChange={e => setSelectedBillNumber(e.target.value)}
+        >
+          <option value="">All Bill Numbers</option>
+          {/* Only show bill numbers for selected supplier if selected, else show all */}
+          {(selectedSupplierId
+            ? getBillNumbersBySupplierId(selectedSupplierId, filteredProducts)
+            : filterOptions.bill_number
+          ).map(bn => (
+            <option key={bn} value={bn}>{bn}</option>
           ))}
         </select>
         <input
