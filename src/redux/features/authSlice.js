@@ -227,6 +227,7 @@ export const googleLogin = createAsyncThunk(
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
+        // Create user doc with status: 'verified'
         await setDoc(userDocRef, {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -234,11 +235,16 @@ export const googleLogin = createAsyncThunk(
           role,
           avatarUrl: firebaseUser.photoURL,
           createdAt: new Date().toISOString(),
+          status: "verified",
         });
       } else {
         // If user exists, use their stored role
         const data = userDoc.data();
         role = data.role || "user";
+        // If status is missing or not 'verified', update it
+        if (!data.status || data.status !== "verified") {
+          await setDoc(userDocRef, { ...data, status: "verified" }, { merge: true });
+        }
       }
 
       const mergedUserData = {
@@ -248,6 +254,7 @@ export const googleLogin = createAsyncThunk(
         emailVerified: firebaseUser.emailVerified,
         avatarUrl: getBestAvatarUrl(firebaseUser.photoURL, userDoc.exists() ? userDoc.data().avatarUrl : null),
         role,
+        status: "verified",
       };
 
       return mergedUserData;

@@ -5,6 +5,8 @@ import Loader from '../Loader';
 import { FiSearch, FiChevronLeft, FiChevronRight, FiX, FiHash, FiEdit } from 'react-icons/fi';
 import EditmanualStock from './EditmanualStock';
 import { useSelector } from 'react-redux';
+import { collection as fsCollection, getDocs as fsGetDocs, query as fsQuery, where as fsWhere, doc as fsDoc, setDoc as fsSetDoc, deleteDoc as fsDeleteDoc, serverTimestamp } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 
 const PAGE_SIZE = 50;
 
@@ -25,9 +27,14 @@ const ShowmanualStock = ({ open, onClose }) => {
   const pageCursorsRef = useRef([]); // Use ref for page cursors
   const [allProducts, setAllProducts] = useState([]);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [modalImageUrl, setModalImageUrl] = useState(null);
-  const [typeFilter, setTypeFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
+  const [userSlots, setUserSlots] = useState([]);
+  const [assignedUserSlot, setAssignedUserSlot] = useState('');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteProduct, setDeleteProduct] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch current user's name from users table
   useEffect(() => {
@@ -58,6 +65,37 @@ const ShowmanualStock = ({ open, onClose }) => {
     return () => { ignore = true; };
   }, [open, refreshFlag]);
 
+  // Assign user slot based on Firestore users collection (non-'user' roles)
+  useEffect(() => {
+    async function assignSlot() {
+      if (!user || !user.email) return;
+      // Fetch all users with role !== 'user'
+      const q = fsQuery(fsCollection(firestore, 'users'), fsWhere('role', '!=', 'user'));
+      const snap = await fsGetDocs(q);
+      const nonUserRoles = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      // Sort by createdAt (or fallback to email)
+      nonUserRoles.sort((a, b) => {
+        if (a.createdAt && b.createdAt) {
+          return new Date(a.createdAt) - new Date(b.createdAt);
+        }
+        return a.email.localeCompare(b.email);
+      });
+      // Assign slots
+      const slotMap = {};
+      nonUserRoles.forEach((u, idx) => {
+        slotMap[u.email] = `uesr${idx + 1}`;
+      });
+      // Find current user's slot
+      const slot = slotMap[user.email] || '';
+      setAssignedUserSlot(slot);
+      // For dropdown, show all slots present in manual_product data
+      const uniqueSlots = Array.from(new Set(allProducts.map(p => p.users).filter(Boolean)));
+      setUserSlots(uniqueSlots);
+      setUserFilter(slot); // Default to your assigned slot
+    }
+    assignSlot();
+  }, [user, allProducts]);
+
   // Handler to refresh products after edit
   const handleEditModalClose = (shouldRefresh = false) => {
     setEditModalOpen(false);
@@ -82,9 +120,9 @@ const ShowmanualStock = ({ open, onClose }) => {
   console.log('Search value:', searchValue, 'Search field:', searchField);
 
   // Add debug log to filter
-  console.log('Filtering with type:', typeFilter, 'searchField:', searchField, 'searchValue:', searchValue);
+  console.log('Filtering with user:', userFilter, 'searchField:', searchField, 'searchValue:', searchValue);
   const filteredProducts = allProducts.filter(product => {
-    if (typeFilter && product.type !== typeFilter) return false;
+    if (userFilter && product.users !== userFilter) return false;
     const barcode = product.barcode !== undefined && product.barcode !== null ? String(product.barcode) : '';
     const sku = product.sku ? String(product.sku).toLowerCase() : '';
     const name = product.name ? String(product.name).toLowerCase() : '';
@@ -101,25 +139,51 @@ const ShowmanualStock = ({ open, onClose }) => {
   const pageSize = 50;
   const paginatedProducts = filteredProducts.slice((page - 1) * pageSize, page * pageSize);
 
-  // Handler to open image modal
-  const handleImageClick = (imgUrl) => {
-    console.log('Image clicked:', imgUrl);
-    setModalImageUrl(imgUrl);
-    setImageModalOpen(true);
+  // Handler to open delete modal
+  const handleDeleteClick = (row) => {
+    setDeleteProduct(row);
+    setDeleteReason('');
+    setDeleteError('');
+    setDeleteModalOpen(true);
   };
 
-  // Handler to close image modal
-  const handleCloseImageModal = () => {
-    setImageModalOpen(false);
-    setModalImageUrl(null);
+  // Handler to confirm delete
+  const handleConfirmDelete = async () => {
+    if (!deleteReason.trim()) {
+      setDeleteError('Delete reason is required.');
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      // Move to manual_product_deleted
+      const deletedDoc = { ...deleteProduct, delete_reason: deleteReason, deleted_at: serverTimestamp() };
+      await fsSetDoc(fsDoc(firestore, 'manual_product_deleted', deleteProduct.id), deletedDoc);
+      // Delete from manual_product
+      await fsDeleteDoc(fsDoc(firestore, 'manual_product', deleteProduct.id));
+      setDeleteModalOpen(false);
+      setDeleteProduct(null);
+      setRefreshFlag(f => !f); // Refresh table
+    } catch (err) {
+      setDeleteError('Failed to delete record.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // Export to Excel handler
+  const handleExportExcel = async () => {
+    // Fetch all records from manual_product
+    const snap = await getDocs(query(collection(firestore, 'manual_product')));
+    const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (data.length === 0) return;
+    // Convert to worksheet
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Manual Product');
+    XLSX.writeFile(wb, 'manual_product_export.xlsx');
   };
 
   if (!open) return null;
-
-  // Add debug log to modal rendering
-  if (imageModalOpen) {
-    console.log('Modal open with image:', modalImageUrl);
-  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -141,6 +205,11 @@ const ShowmanualStock = ({ open, onClose }) => {
         </div>
         {/* Search and Controls */}
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 bg-white border-b">
+          <button
+            className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition mr-4"
+            onClick={handleExportExcel}
+            title="Export all manual product records to Excel"
+          >Export to Excel</button>
           <div className="flex items-center gap-2">
             <select
               className="border rounded px-2 py-1 focus:ring-2 focus:ring-blue-300"
@@ -153,12 +222,13 @@ const ShowmanualStock = ({ open, onClose }) => {
             </select>
             <select
               className="border rounded px-2 py-1 focus:ring-2 focus:ring-blue-300"
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
+              value={userFilter}
+              onChange={e => setUserFilter(e.target.value)}
             >
-              <option value="">All Types</option>
-              <option value="image">Image</option>
-              <option value="folder">Folder</option>
+              <option value="">All Users</option>
+              {userSlots.map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
             </select>
             <div className="relative">
               <input
@@ -224,7 +294,6 @@ const ShowmanualStock = ({ open, onClose }) => {
             <table className="min-w-full text-xs border">
               <thead className="sticky top-0 z-10 bg-blue-50 shadow-sm">
                 <tr className="bg-blue-100">
-                  <th className="p-2 font-semibold text-blue-700">Image</th>
                   <th className="p-2 font-semibold text-blue-700">Barcode</th>
                   <th className="p-2 font-semibold text-blue-700">SKU</th>
                   <th className="p-2 font-semibold text-blue-700">Qty</th>
@@ -237,34 +306,42 @@ const ShowmanualStock = ({ open, onClose }) => {
               <tbody>
                 {paginatedProducts.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={8} className="text-center text-gray-400 py-8">No data found.</td>
+                    <td colSpan={7} className="text-center text-gray-400 py-8">No data found.</td>
                   </tr>
                 ) : (
                   paginatedProducts.map((row, i) => (
                     <tr key={row.id || i} className="border-b hover:bg-blue-50 transition">
-                      <td className="p-2">
-                        {row.url && (
-                          <img
-                            src={row.url}
-                            alt={row.name || 'Image'}
-                            className="h-10 w-10 object-cover rounded cursor-pointer border border-gray-200"
-                            onClick={() => handleImageClick(row.url)}
-                          />
-                        )}
-                      </td>
                       <td className="p-2 font-mono text-blue-900">{String(row.barcode)}</td>
                       <td className="p-2 font-mono text-blue-900">{row.sku}</td>
                       <td className="p-2 text-blue-900">{row.qty}</td>
                       <td className="p-2 text-blue-900">{row.costing}</td>
                       <td className="p-2 text-blue-900">{row.total_costing}</td>
                       <td className="p-2 text-blue-900">{row.count_stock}</td>
-                      <td className="p-2">
+                      <td className="p-2 flex gap-2">
                         <button
-                          className="text-blue-600 hover:text-blue-900 bg-blue-50 border border-blue-200 rounded p-1 flex items-center gap-1 shadow-sm"
-                          title="Edit"
-                          onClick={() => { setEditProduct(row); setEditModalOpen(true); }}
+                          className={`text-blue-600 hover:text-blue-900 bg-blue-50 border border-blue-200 rounded p-1 flex items-center gap-1 shadow-sm ${row.users !== assignedUserSlot ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={row.users === assignedUserSlot ? 'Edit' : 'You can only edit records assigned to you'}
+                          onClick={() => {
+                            if (row.users === assignedUserSlot) {
+                              setEditProduct(row);
+                              setEditModalOpen(true);
+                            }
+                          }}
+                          disabled={row.users !== assignedUserSlot}
                         >
                           <FiEdit /> Edit
+                        </button>
+                        <button
+                          className={`text-red-600 hover:text-red-900 bg-red-50 border border-red-200 rounded p-1 flex items-center gap-1 shadow-sm ${row.users !== assignedUserSlot ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title={row.users === assignedUserSlot ? 'Delete' : 'You can only delete records assigned to you'}
+                          onClick={() => {
+                            if (row.users === assignedUserSlot) {
+                              handleDeleteClick(row);
+                            }
+                          }}
+                          disabled={row.users !== assignedUserSlot}
+                        >
+                          <FiX /> Delete
                         </button>
                       </td>
                     </tr>
@@ -290,31 +367,41 @@ const ShowmanualStock = ({ open, onClose }) => {
             </div>
           </div>
         )}
-        {/* Image Modal */}
-        {imageModalOpen && (
-          <>
-            {console.log('Modal open with image:', modalImageUrl)}
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
-              <div
-                className="bg-white rounded-lg shadow-lg p-4 relative flex flex-col"
-                style={{ maxHeight: '98vh', overflowY: 'auto' }}
+        {deleteModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md relative">
+              <button
+                className="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-2xl font-bold"
+                onClick={() => setDeleteModalOpen(false)}
+                type="button"
+                title="Close"
               >
+                <FiX />
+              </button>
+              <h2 className="text-xl font-bold mb-4 text-red-700 flex items-center gap-2"><FiX /> Delete Record</h2>
+              <div className="mb-4">Please provide a reason for deleting this record:</div>
+              <textarea
+                className="border rounded px-3 py-2 w-full min-h-[80px] focus:ring-2 focus:ring-red-300"
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="Enter reason (required)"
+                disabled={deleteLoading}
+              />
+              {deleteError && <div className="text-red-600 mt-2">{deleteError}</div>}
+              <div className="flex gap-2 mt-6 justify-end">
                 <button
-                  className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
-                  onClick={handleCloseImageModal}
-                  title="Close"
-                >
-                  &times;
-                </button>
-                <img
-                  src={modalImageUrl}
-                  alt="Full Size"
-                  className="max-h-[90vh] max-w-full object-contain mx-auto"
-                  style={{ display: 'block' }}
-                />
+                  className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                  onClick={() => setDeleteModalOpen(false)}
+                  disabled={deleteLoading}
+                >Cancel</button>
+                <button
+                  className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 border border-red-700"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLoading}
+                >{deleteLoading ? 'Deleting...' : 'Confirm Delete'}</button>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
