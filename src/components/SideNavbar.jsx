@@ -17,7 +17,7 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
 
   const menuItems = [
     { name: 'Dashboard', icon: FaIcons.FaHome, path: '/dashboard' },
-    ...(user?.role === 'super_user'
+    ...(user?.role !== 'user'
       ? [
           {
             name: 'POS',

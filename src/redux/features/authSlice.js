@@ -149,6 +149,7 @@ export const signupUser = createAsyncThunk(
         status: "unverified",
         avatarUrl,
         createdAt: new Date().toISOString(),
+        providerData: firebaseUser.providerData,
       };
     } catch (error) {
       return thunkAPI.rejectWithValue(error.message);
@@ -186,6 +187,7 @@ export const loginUser = createAsyncThunk(
         userDataFromFirestore = { ...userDataFromFirestore, status: "verified", role: newRole };
       }
 
+      // Always ensure role is present
       const mergedUserData = {
         ...userDataFromFirestore,
         uid: firebaseUser.uid,
@@ -193,8 +195,11 @@ export const loginUser = createAsyncThunk(
         name: firebaseUser.displayName || userDataFromFirestore.name,
         photoURL: getBestAvatarUrl(firebaseUser.photoURL, userDataFromFirestore.avatarUrl),
         emailVerified: firebaseUser.emailVerified,
+        providerData: firebaseUser.providerData,
+        // fallback to 'user' if role is missing
+        role: userDataFromFirestore.role || 'user',
       };
-
+      console.log('loginUser mergedUserData:', mergedUserData);
       return mergedUserData;
     } catch (error) {
       let customMessage = "An unknown error occurred during login. Please try again.";
@@ -212,51 +217,38 @@ export const googleLogin = createAsyncThunk(
       const userCredential = await signInWithPopup(auth, provider);
       const firebaseUser = userCredential.user;
 
-      let role = "user";
-      if (!firstUserChecked) {
-        const usersSnapshot = await getDocs(collection(firestore, "users"));
-        if (usersSnapshot.empty) {
-          role = "super_user";
-        }
-        firstUserChecked = true;
-        sessionStorage.setItem("firstUserChecked", "true");
-      }
-
-      // Check if user exists in Firestore
+      // Always fetch the latest Firestore user data after login
       const userDocRef = doc(firestore, "users", firebaseUser.uid);
-      const userDoc = await getDoc(userDocRef);
+      let userDoc = await getDoc(userDocRef);
 
+      // If user does not exist, create with default role
       if (!userDoc.exists()) {
-        // Create user doc with status: 'verified'
         await setDoc(userDocRef, {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           name: firebaseUser.displayName,
-          role,
+          role: "user",
           avatarUrl: firebaseUser.photoURL,
           createdAt: new Date().toISOString(),
           status: "verified",
         });
-      } else {
-        // If user exists, use their stored role
-        const data = userDoc.data();
-        role = data.role || "user";
-        // If status is missing or not 'verified', update it
-        if (!data.status || data.status !== "verified") {
-          await setDoc(userDocRef, { ...data, status: "verified" }, { merge: true });
-        }
+        userDoc = await getDoc(userDocRef); // Fetch again after creation
       }
 
+      // Always use the latest Firestore data (may have been updated by admin)
+      const data = userDoc.data();
+
       const mergedUserData = {
+        ...data,
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         name: firebaseUser.displayName,
         emailVerified: firebaseUser.emailVerified,
-        avatarUrl: getBestAvatarUrl(firebaseUser.photoURL, userDoc.exists() ? userDoc.data().avatarUrl : null),
-        role,
-        status: "verified",
+        avatarUrl: firebaseUser.photoURL,
+        providerData: firebaseUser.providerData,
       };
 
+      console.log('googleLogin mergedUserData:', mergedUserData);
       return mergedUserData;
     } catch (error) {
       return thunkAPI.rejectWithValue(error.message);
@@ -291,9 +283,16 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setUser(state, action) {
-      console.log("Dispatching setUser:", action.payload); state.user = action.payload; 
-      if(action.payload !== null) { state.firstUserCheckDone = true; console.log("Redux state: user set, firstUserCheckDone set to true."); }
-      else { state.firstUserCheckDone = false; console.log("Redux state: user set to null, firstUserCheckDone reset to false."); }
+      console.log("Dispatching setUser:", action.payload);
+      // Always include providerData if present in the payload
+      state.user = action.payload ? action.payload : null;
+      if (action.payload !== null) {
+        state.firstUserCheckDone = true;
+        console.log("Redux state: user set, firstUserCheckDone set to true.");
+      } else {
+        state.firstUserCheckDone = false;
+        console.log("Redux state: user set to null, firstUserCheckDone reset to false.");
+      }
     },
     clearError(state) { state.error = null; },
     setAuthLoading(state, action) { state.authLoading = action.payload; },

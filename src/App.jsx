@@ -104,6 +104,7 @@ const App = () => {
           name: firebaseUser.displayName || userData.name,
           avatarUrl: getBestAvatarUrl(firebaseUser.photoURL, userData.avatarUrl),
           emailVerified: firebaseUser.emailVerified,
+          providerData: firebaseUser.providerData,
         }));
       } else {
         dispatch(setUser(null));
@@ -161,7 +162,7 @@ const App = () => {
 
         {/* Protected routes: wrap the entire layout in ProtectedRoute */}
         <Route path='/dashboard' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -175,7 +176,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/dashboard/overview' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -189,7 +190,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/dashboard/settings' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -205,7 +206,7 @@ const App = () => {
 
         {/* Repeat for all other protected routes */}
         <Route path='/pos' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -218,7 +219,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/approvals/leave' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -232,7 +233,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/settings/reset-approval' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -246,7 +247,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/report/sale-report' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -260,7 +261,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/inventory/products' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -274,7 +275,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/inventory/add-product' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -288,7 +289,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/inventory/barcode' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -302,7 +303,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/inventory/old-product' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -316,7 +317,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/expenses' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -330,7 +331,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/people/customers' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -344,7 +345,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/people/suppliers' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -358,7 +359,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/adjustment/supplier-return' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -372,7 +373,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/adjustment/customer-return' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -386,7 +387,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/adjustment/dump-product' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -400,7 +401,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/staff/attendance' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -414,7 +415,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/staff/leave' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -428,7 +429,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/staff/salary' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -442,7 +443,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/todo' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -456,7 +457,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/kanban' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -470,7 +471,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/upload' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -484,7 +485,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/database' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -498,7 +499,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/mstock' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -512,7 +513,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/filemanager' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -526,7 +527,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/tools/faker' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -540,7 +541,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/settings/profile' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -554,7 +555,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/settings/user-role' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
@@ -568,7 +569,7 @@ const App = () => {
           </ProtectedRoute>
         } />
         <Route path='/settings/logs' element={
-          <ProtectedRoute allowedRoles={['super_user']}>
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
             <>
               <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
               <div className="flex">
