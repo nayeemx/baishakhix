@@ -10,6 +10,14 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firestore } from '../../firebase/firebase.config';
 import { doc, getDoc } from 'firebase/firestore';
 
+const privilegedRoles = [
+  'super_user',
+  'admin',
+  'manager',
+  'sales_man',
+  'stock_boy'
+];
+
 const Login = () => {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -75,10 +83,11 @@ const Login = () => {
     try {
       const resultAction = await dispatch(loginUser({ email: form.email, password: form.password }));
       const userData = resultAction.payload;
-      if (userData?.role === 'super_user') {
-        navigate('/dashboard');
-      } else if (userData?.role === 'user') {
+      console.log("Login userData:", userData);
+      if (userData?.role === 'user') {
         navigate('/');
+      } else if (userData?.role) {
+        navigate('/dashboard');
       } else if (userData?.error) {
         setError(userData.error);
       }
@@ -91,10 +100,11 @@ const Login = () => {
     try {
       const resultAction = await dispatch(googleLogin());
       const userData = resultAction.payload;
-      if (userData?.role === 'super_user') {
-        navigate('/dashboard');
-      } else if (userData?.role === 'user') {
+      console.log("Login userData:", userData);
+      if (userData?.role === 'user') {
         navigate('/');
+      } else if (userData?.role) {
+        navigate('/dashboard');
       } else if (userData?.error) {
         setError(userData.error);
       }

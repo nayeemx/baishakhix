@@ -4,8 +4,10 @@ import { collection, addDoc } from 'firebase/firestore';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import BarcodeHistory from './BarcodeHistory'; // Import the modal
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
 const AddUnit = ({ open, setOpen, onSuccess }) => {
+  const { canCreate } = usePermissions();
   const [form, setForm] = useState({
     item_type: '',
     cosmatic_type: '',
@@ -34,6 +36,13 @@ const AddUnit = ({ open, setOpen, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check permissions first
+    if (!canCreate(PERMISSION_PAGES.PRODUCT_LIST)) {
+      toast.error('You do not have permission to create units');
+      return;
+    }
+    
     setLoading(true);
     try {
       const unitData = {

@@ -10,6 +10,7 @@ import {
 import { useSelector } from 'react-redux'
 import { firestore } from '../firebase/firebase.config'
 import { toast } from 'react-toastify'
+import { hasPermission, PERMISSION_PAGES, PERMISSION_ACTIONS } from '../utils/permissions'
 
 const GenericDeleteComponent = ({
   open,
@@ -23,8 +24,39 @@ const GenericDeleteComponent = ({
   const [error, setError] = useState('')
   const user = useSelector(state => state.auth?.user)
 
+  // Determine which page this delete operation is for
+  const getPageKey = () => {
+    switch (collectionName) {
+      case 'products':
+        return PERMISSION_PAGES.PRODUCT_LIST;
+      case 'supplier_list':
+        return PERMISSION_PAGES.SUPPLIER_LIST;
+      case 'customers':
+        return PERMISSION_PAGES.CUSTOMER_LIST;
+      case 'expenses':
+        return PERMISSION_PAGES.EXPENSE_LIST;
+      default:
+        return null;
+    }
+  };
+
+  // Check if user has delete permission for this collection
+  const hasDeletePermission = () => {
+    const pageKey = getPageKey();
+    if (!pageKey) return true; // Allow deletion for collections not in permission system
+    return hasPermission(user, pageKey, PERMISSION_ACTIONS.DELETE);
+  };
+
   const handleDelete = async () => {
     setError('')
+    
+    // Check permissions first
+    if (!hasDeletePermission()) {
+      setError('You do not have permission to delete this item.')
+      toast.error('Permission denied: You do not have delete access for this item.')
+      return
+    }
+    
     if (!reason.trim()) {
       setError('Reason is required.')
       return

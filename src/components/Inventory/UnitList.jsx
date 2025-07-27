@@ -15,6 +15,7 @@ import {
   MdDelete,
 } from "react-icons/md";
 import { FaFileCsv } from "react-icons/fa6";
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
 const PAGE_SIZE = 12;
 
@@ -70,6 +71,7 @@ const UnitList = ({ open, setOpen }) => {
   const [openAddProduct, setOpenAddProduct] = useState(false);
   const [openAddUnit, setOpenAddUnit] = useState(false);
   const currentUser = useSelector(state => state.auth?.user);
+  const { canCreate, canEdit, canDelete } = usePermissions();
 
   const fetchUnits = async () => {
     setLoading(true);
@@ -184,20 +186,24 @@ const UnitList = ({ open, setOpen }) => {
               setPage(0);
             }}
           />
-          <button
-            className="px-4 py-1 bg-green-600 text-white rounded"
-            onClick={() => setOpenAddUnit(true)}
-            title="Add Unit List"
-          >
-            <TbLayoutGridAdd className="w-6 h-6" />
-          </button>
-          <button
-            className="px-4 py-1 bg-blue-600 text-white rounded"
-            onClick={() => setOpenAddProduct(true)}
-            title="Add Product"
-          >
-            <MdAddBox className='w-6 h-6' />
-          </button>
+          {canCreate(PERMISSION_PAGES.PRODUCT_LIST) && (
+            <button
+              className="px-4 py-1 bg-green-600 text-white rounded"
+              onClick={() => setOpenAddUnit(true)}
+              title="Add Unit List"
+            >
+              <TbLayoutGridAdd className="w-6 h-6" />
+            </button>
+          )}
+          {canCreate(PERMISSION_PAGES.PRODUCT_LIST) && (
+            <button
+              className="px-4 py-1 bg-blue-600 text-white rounded"
+              onClick={() => setOpenAddProduct(true)}
+              title="Add Product"
+            >
+              <MdAddBox className='w-6 h-6' />
+            </button>
+          )}
           <button
             className="px-4 py-1 bg-gray-700 text-white rounded"
             onClick={handleExport}
@@ -234,26 +240,30 @@ const UnitList = ({ open, setOpen }) => {
                       ))}
                       <td className="border px-2 py-1">
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setEditData({
-                                ...unit,
-                                docId: unit.docId
-                              });
-                              setOpenEdit(true);
-                            }}
-                            className="px-2 py-1 bg-yellow-500 text-white rounded text-xs"
-                            title="Edit Unit"
-                          >
-                            <MdEdit className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(unit.docId)}
-                            className="px-2 py-1 bg-red-500 text-white rounded text-xs"
-                            title="Delete Unit"
-                          >
-                            <MdDelete className="w-5 h-5" />
-                          </button>
+                          {canEdit(PERMISSION_PAGES.PRODUCT_LIST) && (
+                            <button
+                              onClick={() => {
+                                setEditData({
+                                  ...unit,
+                                  docId: unit.docId
+                                });
+                                setOpenEdit(true);
+                              }}
+                              className="px-2 py-1 bg-yellow-500 text-white rounded text-xs"
+                              title="Edit Unit"
+                            >
+                              <MdEdit className="w-5 h-5" />
+                            </button>
+                          )}
+                          {canDelete(PERMISSION_PAGES.PRODUCT_LIST) && (
+                            <button
+                              onClick={() => handleDelete(unit.docId)}
+                              className="px-2 py-1 bg-red-500 text-white rounded text-xs"
+                              title="Delete Unit"
+                            >
+                              <MdDelete className="w-5 h-5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

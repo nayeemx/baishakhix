@@ -3,8 +3,10 @@ import { firestore } from "../../firebase/firebase.config";
 import { doc, updateDoc } from "firebase/firestore";
 import { toast } from "react-toastify";
 import { useSelector } from "react-redux";
+import { usePermissions, PERMISSION_PAGES } from "../../utils/permissions";
 
 const EditUnit = ({ open, setOpen, unitData, onSuccess }) => {
+  const { canEdit } = usePermissions();
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false);
   const currentUser = useSelector((state) => state.auth?.user);
@@ -28,6 +30,12 @@ const EditUnit = ({ open, setOpen, unitData, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check permissions first
+    if (!canEdit(PERMISSION_PAGES.PRODUCT_LIST)) {
+      toast.error('You do not have permission to edit units');
+      return;
+    }
     
     if (!unitData?.docId) {
       console.error('Missing Firestore document ID:', unitData);

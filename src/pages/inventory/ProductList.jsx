@@ -22,6 +22,7 @@ import UnitList from '../../components/Inventory/UnitList'
 import Loader from '../../components/Loader'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import { usePermissions, PERMISSION_PAGES, PERMISSION_ACTIONS } from '../../utils/permissions'
 import {
   MdInventory,
   MdAddBox,
@@ -31,7 +32,6 @@ import {
   MdDelete,
 } from "react-icons/md";
 import { FaFileCsv } from "react-icons/fa6";
-
 
 const PAGE_SIZE = 28
 
@@ -113,6 +113,7 @@ function getBillNumbersBySupplierId(supplierId, products) {
 
 const ProductList = () => {
   const currentUser = useSelector(state => state.auth?.user)
+  const { canCreate, canEdit, canDelete } = usePermissions()
   const [columnVisibility, setColumnVisibility] = useState({})
   const [globalFilter, setGlobalFilter] = useState('')
   const [rowSelection, setRowSelection] = useState({})
@@ -343,7 +344,7 @@ const ProductList = () => {
         id: 'actions',
         cell: ({ row }) => (
           <div className="flex gap-2">
-            {/* View button */}
+            {/* View button - always available */}
             <button
               onClick={() => {
                 setEditData(row.original)
@@ -354,28 +355,32 @@ const ProductList = () => {
             >
               View
             </button>
-            {/* Edit button */}
-            <button
-              onClick={() => {
-                setEditData(row.original)
-                setOpenEdit(true)
-              }}
-              className="px-2 py-1 bg-yellow-500 text-white rounded cursor-pointer"
-              title="Edit Product"
-            >
-              Edit
-            </button>
-            {/* Delete button */}
-            <button
-              onClick={() => {
-                setDeleteId(row.original.id)
-                setDeleteOpen(true)
-              }}
-              className="px-2 py-1 bg-red-500 text-white rounded cursor-pointer"
-              title="Delete Product"
-            >
-              Delete
-            </button>
+            {/* Edit button - check permissions */}
+            {canEdit(PERMISSION_PAGES.PRODUCT_LIST) && (
+              <button
+                onClick={() => {
+                  setEditData(row.original)
+                  setOpenEdit(true)
+                }}
+                className="px-2 py-1 bg-yellow-500 text-white rounded cursor-pointer"
+                title="Edit Product"
+              >
+                Edit
+              </button>
+            )}
+            {/* Delete button - check permissions */}
+            {canDelete(PERMISSION_PAGES.PRODUCT_LIST) && (
+              <button
+                onClick={() => {
+                  setDeleteId(row.original.id)
+                  setDeleteOpen(true)
+                }}
+                className="px-2 py-1 bg-red-500 text-white rounded cursor-pointer"
+                title="Delete Product"
+              >
+                Delete
+              </button>
+            )}
           </div>
         ),
         footer: props => props.column.id,
@@ -604,13 +609,15 @@ const ProductList = () => {
           >
             <MdInventory className='w-6 h-6' />
           </button>
-          <button
-            onClick={handleAddProduct}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
-            title="Add New Product"
-          >
-            <MdAddBox className='w-6 h-6' />
-          </button>
+          {canCreate(PERMISSION_PAGES.PRODUCT_LIST) && (
+            <button
+              onClick={handleAddProduct}
+              className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+              title="Add New Product"
+            >
+              <MdAddBox className='w-6 h-6' />
+            </button>
+          )}
           <button
             onClick={handleExport}
             className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
@@ -830,20 +837,24 @@ const ProductList = () => {
                           >
                             <MdVisibility className='w-4 h-4' />
                           </button>
-                          <button
-                            onClick={() => handleEditProduct(row.original)}
-                            className="px-2 py-1 bg-slate-700 text-white rounded cursor-pointer"
-                            title="Edit Product"
-                          >
-                            <MdEdit className='w-4 h-4' />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(row.original.id)}
-                            className="px-2 py-1 bg-red-500 text-white rounded cursor-pointer"
-                            title="Delete Product"
-                          >
-                            <MdDelete className='w-4 h-4' />
-                          </button>
+                          {canEdit(PERMISSION_PAGES.PRODUCT_LIST) && (
+                            <button
+                              onClick={() => handleEditProduct(row.original)}
+                              className="px-2 py-1 bg-slate-700 text-white rounded cursor-pointer"
+                              title="Edit Product"
+                            >
+                              <MdEdit className='w-4 h-4' />
+                            </button>
+                          )}
+                          {canDelete(PERMISSION_PAGES.PRODUCT_LIST) && (
+                            <button
+                              onClick={() => handleDeleteProduct(row.original.id)}
+                              className="px-2 py-1 bg-red-500 text-white rounded cursor-pointer"
+                              title="Delete Product"
+                            >
+                              <MdDelete className='w-4 h-4' />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )

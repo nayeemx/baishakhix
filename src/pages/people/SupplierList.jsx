@@ -9,6 +9,7 @@ import Loader from "../../components/Loader";
 import { saveAs } from "file-saver";
 import Papa from "papaparse";
 import { FaEdit, FaTrash, FaFileInvoiceDollar } from 'react-icons/fa';
+import { usePermissions, PERMISSION_PAGES } from "../../utils/permissions";
 
 const SupplierList = () => {
   const [suppliers, setSuppliers] = useState([]);
@@ -30,6 +31,7 @@ const SupplierList = () => {
   const [deleteBlocked, setDeleteBlocked] = useState(false);
   const [deleteBlockMsg, setDeleteBlockMsg] = useState("");
   const currentUser = useSelector(state => state.auth?.user);
+  const { canEdit, canDelete } = usePermissions();
 
   // For view modal
   const [viewOpen, setViewOpen] = useState(false);
@@ -331,20 +333,24 @@ const SupplierList = () => {
                     >
                       <FaFileInvoiceDollar className="text-blue-700" />
                     </button>
-                    <button
-                      className="p-2 bg-yellow-200 hover:bg-yellow-300 rounded mr-2"
-                      onClick={() => handleEditClick(s)}
-                      title="Edit Supplier"
-                    >
-                      <FaEdit className="text-yellow-700" />
-                    </button>
-                    <button
-                      className="p-2 bg-red-200 hover:bg-red-300 rounded"
-                      onClick={() => handleDeleteClick(s)}
-                      title="Delete Supplier"
-                    >
-                      <FaTrash className="text-red-700" />
-                    </button>
+                    {canEdit(PERMISSION_PAGES.SUPPLIER_LIST) && (
+                      <button
+                        className="p-2 bg-yellow-200 hover:bg-yellow-300 rounded mr-2"
+                        onClick={() => handleEditClick(s)}
+                        title="Edit Supplier"
+                      >
+                        <FaEdit className="text-yellow-700" />
+                      </button>
+                    )}
+                    {canDelete(PERMISSION_PAGES.SUPPLIER_LIST) && (
+                      <button
+                        className="p-2 bg-red-200 hover:bg-red-300 rounded"
+                        onClick={() => handleDeleteClick(s)}
+                        title="Delete Supplier"
+                      >
+                        <FaTrash className="text-red-700" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -4,6 +4,7 @@ import { collection, addDoc, getDocs, query, where, doc, getDoc } from 'firebase
 import { toast } from 'react-toastify';
 import TiptapEditor from '../TiptapEditor';
 import { Switch } from '@headlessui/react';
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
 const dropdownFields = [
   "item_type",
@@ -96,6 +97,7 @@ const STORAGE_KEYS = {
 };
 
 const AddProductModal = ({ open, setOpen, suppliersList, queryClient }) => {
+  const { canCreate } = usePermissions();
   const [isCosmeticMode, setIsCosmeticMode] = useState(false);
   const [form, setForm] = useState({
     item_type: 'General', // Default to General
@@ -640,6 +642,13 @@ const AddProductModal = ({ open, setOpen, suppliersList, queryClient }) => {
   // Modify handleSubmit
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check permissions first
+    if (!canCreate(PERMISSION_PAGES.PRODUCT_LIST)) {
+      toast.error('You do not have permission to create products');
+      return;
+    }
+    
     if (!generatedBarcode || !generatedSku) {
       toast.error('Barcode or SKU not generated');
       return;

@@ -24,35 +24,15 @@ const roles = [
   { value: 'user', label: 'User' }
 ];
 
-const pages = [
-  { key: "ProductList", label: "Product List" },
-  { key: "CustomerList", label: "Customer List" },
-  { key: "SupplierList", label: "Supplier List" },
-  { key: "ExpenseList", label: "Expense List" },
-  // ...add all your pages here
-];
-const actions = ["create", "edit", "delete"];
-
 const UserRole = () => {
   const currentUser = useSelector((state) => state.auth.user);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState({});
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [permissionDraft, setPermissionDraft] = useState({});
-  const [savingPermissions, setSavingPermissions] = useState(false);
 
   // Check if current user has permission to manage roles
   const canManageRoles = currentUser && roleHierarchy.indexOf(currentUser.role) >= 0 && currentUser.role !== 'user';
   const currentUserRoleIndex = roleHierarchy.indexOf(currentUser?.role);
-
-  // Helper function to check if current user can manage a specific user
-  const canManageUser = (targetUser) => {
-    if (!targetUser || !currentUser) return false;
-    const targetUserRoleIndex = roleHierarchy.indexOf(targetUser.role || 'user');
-    return targetUserRoleIndex > currentUserRoleIndex;
-  };
 
   // Fetch all users from Firestore
   const fetchUsers = async () => {
@@ -84,21 +64,6 @@ const UserRole = () => {
     // Prevent changing your own role
     if (userId === currentUser?.uid) {
       toast.error('You cannot change your own role');
-      return;
-    }
-
-    // Get the target user's current role
-    const targetUser = users.find(u => u.id === userId);
-    if (!targetUser) {
-      toast.error('User not found');
-      return;
-    }
-
-    const targetUserRoleIndex = roleHierarchy.indexOf(targetUser.role || 'user');
-
-    // CRITICAL FIX: Prevent changing roles of users with higher or equal role
-    if (targetUserRoleIndex <= currentUserRoleIndex) {
-      toast.error('You cannot change the role of users with higher or equal role than yours.');
       return;
     }
 
@@ -143,57 +108,6 @@ const UserRole = () => {
     updateUserRole(userId, newRole);
   };
 
-  const openPermissionModal = (user) => {
-    // CRITICAL FIX: Check if current user can manage this user's permissions
-    const targetUserRoleIndex = roleHierarchy.indexOf(user.role || 'user');
-    
-    if (targetUserRoleIndex <= currentUserRoleIndex) {
-      toast.error('You cannot manage permissions for users with higher or equal role than yours.');
-      return;
-    }
-
-    setSelectedUser(user);
-    setPermissionDraft(user.permissions || {});
-    setShowPermissionModal(true);
-  };
-
-  const closePermissionModal = () => {
-    setShowPermissionModal(false);
-    setSelectedUser(null);
-    setPermissionDraft({});
-  };
-
-  const handlePermissionChange = (pageKey, action, checked) => {
-    setPermissionDraft(prev => ({
-      ...prev,
-      [pageKey]: {
-        ...prev[pageKey],
-        [action]: checked
-      }
-    }));
-  };
-
-  const savePermissions = async () => {
-    if (!selectedUser) return;
-    setSavingPermissions(true);
-    try {
-      await updateDoc(doc(firestore, 'users', selectedUser.id), {
-        permissions: permissionDraft
-      });
-      toast.success("Permissions updated!");
-      setUsers(prev =>
-        prev.map(u =>
-          u.id === selectedUser.id ? { ...u, permissions: permissionDraft } : u
-        )
-      );
-      closePermissionModal();
-    } catch (err) {
-      toast.error("Failed to update permissions: " + err.message);
-    } finally {
-      setSavingPermissions(false);
-    }
-  };
-
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -229,7 +143,7 @@ const UserRole = () => {
         <p className="text-gray-600 mt-2">Manage user roles and permissions</p>
         <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-blue-800 text-sm">
-            <strong>Note:</strong> You can only manage users with lower roles than yours. You cannot change your own role or manage users with equal or higher roles.
+            <strong>Note:</strong> You can update roles for all users except your own account. You cannot assign a role higher than your own.
           </p>
         </div>
       </div>
@@ -254,9 +168,6 @@ const UserRole = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Action
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -277,11 +188,6 @@ const UserRole = () => {
                           {user.id === currentUser?.uid && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                               You
-                            </span>
-                          )}
-                          {!canManageUser(user) && user.id !== currentUser?.uid && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                              Higher Role
                             </span>
                           )}
                         </div>
@@ -310,13 +216,9 @@ const UserRole = () => {
                     <select
                       value={user.role || 'user'}
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      disabled={
-                        updating[user.id] || 
-                        user.id === currentUser?.uid ||
-                        roleHierarchy.indexOf(user.role || 'user') <= currentUserRoleIndex
-                      }
+                      disabled={updating[user.id] || user.id === currentUser?.uid}
                       className={`block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                        (updating[user.id] || user.id === currentUser?.uid || roleHierarchy.indexOf(user.role || 'user') <= currentUserRoleIndex) ? 'opacity-50 cursor-not-allowed' : ''
+                        (updating[user.id] || user.id === currentUser?.uid) ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
                       {roles
@@ -343,30 +245,9 @@ const UserRole = () => {
                         <span className="text-xs text-gray-500">Cannot change your own role</span>
                       </div>
                     )}
-                    {roleHierarchy.indexOf(user.role || 'user') <= currentUserRoleIndex && user.id !== currentUser?.uid && (
-                      <div className="mt-1">
-                        <span className="text-xs text-red-500">Cannot change higher/equal role</span>
-                      </div>
-                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {user.role !== "super_user" && roleHierarchy.indexOf(user.role || 'user') > currentUserRoleIndex && (
-                      <button
-                        className="bg-blue-500 text-white px-3 py-1 rounded"
-                        onClick={() => openPermissionModal(user)}
-                      >
-                        Manage
-                      </button>
-                    )}
-                    {user.role === "super_user" && (
-                      <span className="text-xs text-gray-400">All Access</span>
-                    )}
-                    {user.role !== "super_user" && roleHierarchy.indexOf(user.role || 'user') <= currentUserRoleIndex && (
-                      <span className="text-xs text-gray-400">No Permission</span>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -379,60 +260,6 @@ const UserRole = () => {
         <p>Total Users: {users.length}</p>
         <p>Current User: {currentUser?.name} ({currentUser?.role})</p>
       </div>
-
-      {showPermissionModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl">
-            <h2 className="text-xl font-bold mb-4">
-              Manage Permissions for {selectedUser.name}
-            </h2>
-            <table className="min-w-full mb-4">
-              <thead>
-                <tr>
-                  <th className="text-left p-2">Page</th>
-                  {actions.map(a => (
-                    <th key={a} className="text-center p-2 capitalize">{a}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pages.map(page => (
-                  <tr key={page.key}>
-                    <td className="p-2">{page.label}</td>
-                    {actions.map(action => (
-                      <td key={action} className="text-center p-2">
-                        <input
-                          type="checkbox"
-                          checked={!!permissionDraft?.[page.key]?.[action]}
-                          onChange={e =>
-                            handlePermissionChange(page.key, action, e.target.checked)
-                          }
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-4 py-2 bg-gray-200 rounded"
-                onClick={closePermissionModal}
-                disabled={savingPermissions}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded"
-                onClick={savePermissions}
-                disabled={savingPermissions}
-              >
-                {savingPermissions ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

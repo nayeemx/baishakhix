@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { doc, updateDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { firestore } from '../../firebase/firebase.config'
 import TiptapEditor from '../TiptapEditor' // <-- import your TiptapEditor
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions'
+import { toast } from 'react-toastify'
 
 const dropdownFields = [
   'brand',
@@ -69,6 +71,7 @@ const EditProductModal = ({
   suppliersList,
   queryClient,
 }) => {
+  const { canEdit } = usePermissions();
   const [form, setForm] = useState(data || {})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -168,6 +171,14 @@ const EditProductModal = ({
   // Improved duplicate barcode check
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Check permissions first
+    if (!canEdit(PERMISSION_PAGES.PRODUCT_LIST)) {
+      setError('You do not have permission to edit products')
+      toast.error('Permission denied: You do not have edit access for products.')
+      return
+    }
+    
     setLoading(true)
     setError('')
     try {
