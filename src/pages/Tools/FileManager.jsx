@@ -10,6 +10,7 @@ import {
   doc,
   deleteDoc,
   serverTimestamp,
+  onSnapshot,
 } from 'firebase/firestore';
 import { FiFolderPlus, FiUpload, FiSearch, FiTrash2, FiFolder, FiChevronRight, FiChevronDown, FiImage, FiX, FiZoomIn } from 'react-icons/fi';
 
@@ -54,6 +55,8 @@ const FileManager = () => {
   const user = useSelector(state => state.auth.user);
   const [folders, setFolders] = useState([]); // all folders
   const [images, setImages] = useState([]); // images in current folder
+  const [allFolders, setAllFolders] = useState([]); // all folders for search
+  const [allImages, setAllImages] = useState([]); // all images for search
   const [currentFolder, setCurrentFolder] = useState(null); // folder id (null = root)
   const [folderTree, setFolderTree] = useState([]); // for sidebar
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -68,30 +71,31 @@ const FileManager = () => {
   const [brokenImages, setBrokenImages] = useState(new Set()); // track broken image URLs
   const [imageLoadStatus, setImageLoadStatus] = useState({}); // track loading status of each image
 
-  // Fetch all folders from 'file_manager' where type === 'folder'
+  // Real-time fetch for all folders and images for search
   useEffect(() => {
-    const fetchFolders = async () => {
-      setLoadingFolders(true);
-      try {
-        const snap = await getDocs(query(collection(firestore, 'file_manager'), where('type', '==', 'folder')));
-        const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setFolders(data);
-        // If no folders, set currentFolder to null
-        if (data.length === 0) {
-          setCurrentFolder(null);
-        } else if (currentFolder !== null && !data.find(f => f.id === currentFolder)) {
-          // If currentFolder was deleted, reset to root
-          setCurrentFolder(null);
-        }
-      } catch (err) {
-        console.error('[FileManager] Error fetching folders:', err);
-      } finally {
-        setLoadingFolders(false);
-      }
+    if (!user) return;
+    
+    // All folders real-time
+    const qAllFolders = query(collection(firestore, 'file_manager'), where('type', '==', 'folder'));
+    const unsubAllFolders = onSnapshot(qAllFolders, (snap) => {
+      const foldersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAllFolders(foldersData);
+      setFolders(foldersData);
+      setLoadingFolders(false);
+    });
+    
+    // All images real-time
+    const qAllImages = query(collection(firestore, 'file_manager'), where('type', '==', 'image'));
+    const unsubAllImages = onSnapshot(qAllImages, (snap) => {
+      const imagesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAllImages(imagesData);
+    });
+    
+    return () => {
+      unsubAllFolders();
+      unsubAllImages();
     };
-    fetchFolders();
-    // eslint-disable-next-line
-  }, []);
+  }, [user]);
 
   // Build folder tree for sidebar
   useEffect(() => {
@@ -289,6 +293,24 @@ const FileManager = () => {
 
   // Remove debounced search - use immediate search instead
 
+  // Helper to build full breadcrumb path from root to current folder
+  function getBreadcrumbs() {
+    if (!currentFolder) return [{ name: 'Root', id: null }];
+    const path = [];
+    let folderId = currentFolder;
+    while (folderId) {
+      const folder = allFolders.find(f => f.id === folderId);
+      if (!folder) break;
+      path.unshift({ name: folder.name, id: folder.id });
+      folderId = folder.parentId;
+    }
+    path.unshift({ name: 'Root', id: null });
+    return path;
+  }
+
+  // Breadcrumbs
+  const breadcrumbs = getBreadcrumbs();
+
   // Close modal on ESC key
   useEffect(() => {
     const handleEsc = (e) => {
@@ -334,27 +356,46 @@ const FileManager = () => {
     </ul>
   );
 
-  // Search filter - works for both images and folders
+  // Search logic - works like the TypeScript version
   const searchTerm = search.trim().toLowerCase();
+  const showSearchResults = searchTerm.length > 0;
   
-  const filteredImages = searchTerm
-    ? images.filter(img => img.name.toLowerCase().includes(searchTerm))
+  const filteredImages = showSearchResults
+    ? allImages.filter(img => img.name.toLowerCase().includes(searchTerm))
     : images;
   
-  const filteredSubfolders = searchTerm
-    ? subfolders.filter(sf => sf.name.toLowerCase().includes(searchTerm))
+  const filteredSubfolders = showSearchResults
+    ? allFolders.filter(folder => folder.name.toLowerCase().includes(searchTerm))
     : subfolders;
 
   // Filter folders in sidebar based on search
-  const filteredFolderTree = searchTerm
-    ? buildFolderTree(folders).filter(folder => 
+  const filteredFolderTree = showSearchResults
+    ? buildFolderTree(allFolders).filter(folder => 
         folder.name.toLowerCase().includes(searchTerm) ||
         folder.children.some(child => child.name.toLowerCase().includes(searchTerm))
       )
     : buildFolderTree(folders);
 
   return (
-    <div className="flex h-[80vh] bg-white rounded shadow overflow-hidden">
+    <div className="flex h-[80vh] bg-white rounded shadow overflow-hidden flex-col">
+      {/* Breadcrumbs */}
+      <div className="p-4 border-b bg-gray-50">
+        <nav className="text-sm text-gray-600 flex items-center gap-2">
+          {breadcrumbs.map((bc, i) => (
+            <span key={i} className="flex items-center">
+              {i > 0 && <span className="mx-1">&gt;</span>}
+              <button
+                className={`hover:underline ${i === breadcrumbs.length - 1 ? 'font-semibold text-black' : ''}`}
+                onClick={() => setCurrentFolder(bc.id)}
+                disabled={i === breadcrumbs.length - 1}
+              >
+                {bc.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+      </div>
+      <div className="flex flex-1 overflow-hidden">
       {/* Sidebar: Folders */}
       <div className="w-64 border-r p-4 bg-gray-50">
         <div className="flex items-center justify-between mb-2">
@@ -437,7 +478,7 @@ const FileManager = () => {
           ))}
         </div>
         {/* Images */}
-        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 auto-rows-min" style={{ alignItems: 'start' }}>
           {filteredImages.length === 0 && filteredSubfolders.length === 0 && searchTerm && (
             <div className="col-span-full text-gray-400 text-center py-8">
               <div className="text-lg font-medium mb-2">No results found</div>
@@ -452,17 +493,17 @@ const FileManager = () => {
             </div>
           )}
           {filteredImages.map(img => (
-            <div key={img.id} className="border rounded shadow p-2 flex flex-col items-center bg-white relative group">
-              <div className="relative w-full" style={{height: '100px'}}>
+            <div key={img.id} className="border rounded shadow p-2 flex flex-col items-center bg-white relative group w-36">
+              <div className="relative w-full">
                 {isImageBroken(img.id) ? (
-                  <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center">
+                  <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center">
                     <div className="text-center text-gray-500">
                       <FiImage className="mx-auto text-2xl mb-1" />
                       <div className="text-xs">Image not found</div>
                     </div>
                   </div>
                 ) : isImageLoading(img.id) ? (
-                  <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center">
+                  <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center">
                     <div className="text-center text-gray-500">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
                       <div className="text-xs">Loading...</div>
@@ -472,7 +513,7 @@ const FileManager = () => {
                   <img 
                     src={img.url} 
                     alt={img.name} 
-                    className="w-full h-full object-contain bg-gray-100 rounded cursor-pointer" 
+                    className="w-full h-24 object-cover bg-gray-100 rounded cursor-pointer" 
                     onClick={() => openImageModal(img)}
                     onError={() => handleImageError(img.id)}
                     onLoad={() => handleImageLoad(img.id)}
@@ -500,6 +541,7 @@ const FileManager = () => {
           ))}
         </div>
       </div>
+      </div>
 
       {/* Image Preview Modal */}
       {showImageModal && selectedImage && (
@@ -508,8 +550,8 @@ const FileManager = () => {
           onClick={() => setShowImageModal(false)}
         >
           <div 
-            className="relative max-w-4xl max-h-full"
-            onClick={(e) => e.stopPropagation()}
+            className="relative bg-white rounded-lg shadow-lg max-w-10xl w-full max-h-[94vh] overflow-auto flex flex-col items-center"
+            onClick={e => e.stopPropagation()}
           >
             <button
               className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 hover:bg-gray-100"
@@ -517,25 +559,13 @@ const FileManager = () => {
             >
               <FiX size={24} />
             </button>
-            {isImageBroken(selectedImage.id) ? (
-              <div className="bg-white rounded-lg p-8 text-center">
-                <FiImage className="mx-auto text-6xl text-gray-400 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">Image Not Found</h3>
-                <p className="text-gray-500 mb-4">The image "{selectedImage.name}" could not be loaded.</p>
-                <p className="text-sm text-gray-400">The image may have been deleted from the server or the URL is invalid.</p>
-              </div>
-            ) : (
-              <img 
-                src={selectedImage.url} 
-                alt={selectedImage.name} 
-                className="max-w-full max-h-full object-contain"
-                onLoad={() => handleImageLoad(selectedImage.id)}
-                onError={() => handleImageError(selectedImage.id)}
-              />
-            )}
-            <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded">
-              {selectedImage.name}
-            </div>
+            <img
+              src={selectedImage.url}
+              alt={selectedImage.name}
+              className="w-full h-full object-contain"
+              style={{ display: 'block' }}
+            />
+            <div className="text-center text-sm text-gray-700 mt-2">{selectedImage.name}</div>
           </div>
         </div>
       )}

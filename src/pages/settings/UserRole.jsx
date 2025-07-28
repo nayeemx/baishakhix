@@ -26,11 +26,22 @@ const roles = [
 
 const pages = [
   { key: "ProductList", label: "Product List" },
+  { key: "AddProduct", label: "Add Product" },
   { key: "CustomerList", label: "Customer List" },
   { key: "SupplierList", label: "Supplier List" },
+  { key: "ViewSupplier", label: "View Supplier" },
   { key: "ExpenseList", label: "Expense List" },
   { key: "Profile", label: "Profile" },
-  // ...add all your pages here
+  { key: "DumpProduct", label: "Product Dumpster" },
+  { key: "FileManager", label: "File Manager" },
+  { key: "ManualStocks", label: "Manual Stock Import" },
+  { key: "Database", label: "Database Tools" },
+  { key: "Upload", label: "Data Upload/Convert" },
+  { key: "Faker", label: "Data Faker/Generator" },
+  { key: "KanBan", label: "KanBan Board" },
+  { key: "ToDo", label: "To-Do List" },
+  { key: "SupplierAdjustment", label: "Supplier Adjustment" },
+  { key: "OldProduct", label: "Old Product" },
 ];
 const actions = ["create", "edit", "delete"];
 
@@ -383,7 +394,7 @@ const UserRole = () => {
 
       {showPermissionModal && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-4xl h-[94vh] overflow-auto">
             <h2 className="text-xl font-bold mb-4">
               Manage Permissions for {selectedUser.name}
             </h2>

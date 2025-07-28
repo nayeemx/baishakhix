@@ -12,6 +12,7 @@ import SupplierTransaction from "./suppliertransaction";
 import SupplierAdjustment from "./SupplierAdjustment";
 import { FaMoneyBillWave, FaSearch, FaInfoCircle, FaHistory, FaSlidersH, FaTimes } from "react-icons/fa";
 import Loader from "../Loader";
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
 const ViewSupplier = ({ supplier }) => {
   const [products, setProducts] = useState([]);
@@ -28,6 +29,8 @@ const ViewSupplier = ({ supplier }) => {
   });
   const [editSaving, setEditSaving] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+
+  const { canCreate } = usePermissions();
 
   const handleTransactionRefresh = () => {
     setRefreshFlag((f) => f + 1);
@@ -317,21 +320,25 @@ const ViewSupplier = ({ supplier }) => {
                       Payment History
                     </h3>
                     <div className="flex gap-6">
-                      <button
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded flex items-center"
-                        onClick={() => setShowAdjustmentModal(true)}
-                        title="Adjustment"
-                      >
-                        <FaSlidersH className="mr-2" />
-                        Adjustment
-                      </button>
-                      <button
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center"
-                        onClick={() => setShowTransactionModal(true)}
-                      >
-                        <FaMoneyBillWave className="mr-2" />
-                        Pay Bill
-                      </button>
+                      {canCreate(PERMISSION_PAGES.VIEW_SUPPLIER) && (
+                        <button
+                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded flex items-center"
+                          onClick={() => setShowAdjustmentModal(true)}
+                          title="Adjustment"
+                        >
+                          <FaSlidersH className="mr-2" />
+                          Adjustment
+                        </button>
+                      )}
+                      {canCreate(PERMISSION_PAGES.VIEW_SUPPLIER) && (
+                        <button
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center"
+                          onClick={() => setShowTransactionModal(true)}
+                        >
+                          <FaMoneyBillWave className="mr-2" />
+                          Pay Bill
+                        </button>
+                      )}
                     </div>
                   </div>
                   <table className="min-w-full border text-xs">

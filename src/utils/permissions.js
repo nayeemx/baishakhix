@@ -4,10 +4,14 @@ import { useSelector } from 'react-redux';
 // Define the pages that have permissions
 export const PERMISSION_PAGES = {
   PRODUCT_LIST: 'ProductList',
+  ADD_PRODUCT: 'AddProduct',
   CUSTOMER_LIST: 'CustomerList', 
   SUPPLIER_LIST: 'SupplierList',
+  VIEW_SUPPLIER: 'ViewSupplier',
   EXPENSE_LIST: 'ExpenseList',
-  PROFILE: 'Profile'
+  PROFILE: 'Profile',
+  OLD_PRODUCT: 'OldProduct',
+  SUPPLIER_ADJUSTMENT: 'SupplierAdjustment',
 };
 
 // Define the actions that can be performed

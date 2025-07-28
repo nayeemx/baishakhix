@@ -7,6 +7,7 @@ import { Switch } from '@headlessui/react';
 import { useNavigate } from 'react-router-dom';
 import { MdInventory } from "react-icons/md";
 import UnitList from '../../components/Inventory/UnitList'; // adjust path as needed
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
 const dropdownFields = [
   "item_type", "cosmatic_type", "product_category", "product_type", "brand",
@@ -66,6 +67,7 @@ const AddProduct = () => {
   const [userData, setUserData] = useState(null);
   const [showUnitList, setShowUnitList] = useState(false);
   const navigate = useNavigate();
+  const { canCreate } = usePermissions();
 
   // Fetch suppliers
   useEffect(() => {
@@ -274,42 +276,40 @@ const AddProduct = () => {
           <Switch
             checked={isCosmeticMode}
             onChange={setIsCosmeticMode}
-            className={`${
-              isCosmeticMode ? 'bg-blue-600' : 'bg-gray-200'
-            } relative inline-flex h-6 w-11 items-center rounded-full transition-colors`}
+            className={
+              isCosmeticMode ? 'bg-blue-600' : 'bg-gray-200' + ' relative inline-flex h-6 w-11 items-center rounded-full transition-colors'
+            }
           >
             <span
-              className={`${
-                isCosmeticMode ? 'translate-x-6' : 'translate-x-1'
-              } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+              className={
+                isCosmeticMode ? 'translate-x-6' : 'translate-x-1' + ' inline-block h-4 w-4 transform rounded-full bg-white transition-transform'
+              }
             />
           </Switch>
           <span className={`text-sm ${isCosmeticMode ? 'font-bold' : ''}`}>Cosmetic</span>
         </div>
       </div>
-      
       <div className="flex items-center justify-between mb-4">
         <div>
           {/* Show generated SKU below the toggle or above the form */}
-      {showCode && (
-        <div className="flex items-center gap-4">
-          <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded font-mono text-sm">
-            Barcode: {generatedBarcode}
-          </span>
-          <span className="bg-green-100 text-green-800 px-3 py-1 rounded font-mono text-sm">
-            SKU: {generatedSku}
-          </span>
-          <button
-            className="ml-2 text-gray-500 hover:text-red-600 font-bold"
-            onClick={() => setShowCode(false)}
-            type="button"
-          >
-            &times;
-          </button>
+          {showCode && (
+            <div className="flex items-center gap-4">
+              <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded font-mono text-sm">
+                Barcode: {generatedBarcode}
+              </span>
+              <span className="bg-green-100 text-green-800 px-3 py-1 rounded font-mono text-sm">
+                SKU: {generatedSku}
+              </span>
+              <button
+                className="ml-2 text-gray-500 hover:text-red-600 font-bold"
+                onClick={() => setShowCode(false)}
+                type="button"
+              >
+                &times;
+              </button>
+            </div>
+          )}
         </div>
-      )}
-        </div>
-
         <div className="flex gap-2">
           <button
             type="button"
@@ -318,21 +318,21 @@ const AddProduct = () => {
           >
             Product List
           </button>
-          <button
-            onClick={() => setShowUnitList(true)}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
-            title="Manage Units"
-            type="button"
-          >
-            <MdInventory className='w-6 h-6' />
-          </button>
+          {canCreate(PERMISSION_PAGES.ADD_PRODUCT) && (
+            <button
+              onClick={() => setShowUnitList(true)}
+              className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+              title="Manage Units"
+              type="button"
+            >
+              <MdInventory className='w-6 h-6' />
+            </button>
+          )}
         </div>
       </div>
-
       {showUnitList && (
         <UnitList open={showUnitList} setOpen={setShowUnitList} />
       )}
-
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* General Information */}
         <div>
@@ -497,7 +497,8 @@ const AddProduct = () => {
         <button
           type="submit"
           className="bg-green-500 text-white px-4 py-2 rounded"
-          disabled={loading}
+          disabled={!canCreate(PERMISSION_PAGES.ADD_PRODUCT) || loading}
+          title={!canCreate(PERMISSION_PAGES.ADD_PRODUCT) ? 'You do not have permission to add products.' : ''}
         >
           {loading ? 'Adding...' : 'Add Product'}
         </button>

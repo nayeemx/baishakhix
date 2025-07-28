@@ -8,6 +8,7 @@ import {
   addDoc,
   query,
   where,
+  getDoc,
 } from 'firebase/firestore';
 import { useSelector } from 'react-redux';
 import { firestore } from '../../firebase/firebase.config';
@@ -16,6 +17,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { FiPackage, FiCheckCircle } from 'react-icons/fi';
 import { BsExclamationTriangle } from 'react-icons/bs';
 import { AiOutlineDelete } from 'react-icons/ai';
+import { usePermissions } from '../../utils/permissions';
 
 const PAGE_SIZE = 25;
 
@@ -54,6 +56,8 @@ const PRODUCT_COLUMNS = [
 
 const DumpProduct = () => {
   const user = useSelector((state) => state.auth.user);
+  const { canCreate, canEdit, canDelete } = usePermissions();
+  // (No page-blocking check! Always render the page)
   const [products, setProducts] = useState([]);
   const [dumpedMap, setDumpedMap] = useState({}); // product_id -> total dumped
   const [dumpedRecords, setDumpedRecords] = useState([]); // all dump_product records
@@ -186,51 +190,45 @@ const DumpProduct = () => {
   };
 
   const handleDumpSubmit = async () => {
-    if (!selectedProduct || !dumpReason || dumpQuantity < 1) return;
-    const productRef = doc(firestore, 'products', selectedProduct.id);
-    const unitPrice = Number(selectedProduct.unit_price) || 0;
-    const newQuantity = selectedProduct.quantity - dumpQuantity;
-    // 1. Add to dump_product (store full snapshot + user info)
-    await addDoc(collection(firestore, 'dump_product'), {
-      ...selectedProduct,
-      product_id: selectedProduct.id,
-      dumped_quantity: dumpQuantity,
-      reason: dumpReason,
-      dumped_at: new Date().toISOString(),
-      dumped_by_uid: user?.uid,
-      dumped_by_name: user?.name || user?.displayName || user?.email,
-    });
-    // 2. Update or delete from products
-    if (newQuantity > 0) {
-      await updateDoc(productRef, {
-        quantity: newQuantity,
-        total_price: newQuantity * unitPrice,
-      });
-    } else {
-      // Get all dump_product entries for this product
-      const dumpQuery = query(
-        collection(firestore, 'dump_product'),
-        where('product_id', '==', selectedProduct.id)
-      );
-      const dumpSnapshot = await getDocs(dumpQuery);
-      let totalDumped = 0;
-      dumpSnapshot.forEach((doc) => {
-        const d = doc.data();
-        totalDumped += Number(d.dumped_quantity) || 0;
-      });
-      if (totalDumped >= selectedProduct.quantity) {
-        await deleteDoc(productRef);
-      } else {
-        await updateDoc(productRef, {
-          quantity: 0,
-          total_price: 0,
-        });
-      }
+    if (!canCreate('DumpProduct')) {
+      toast.error('You do not have permission to dump products.');
+      return;
     }
-    toast.success(`Successfully dumped ${dumpQuantity} units of ${selectedProduct.product}`);
-    setModalOpen(false);
-    setSelectedProduct(null);
-    await fetchProducts();
+    if (!selectedProduct || !dumpReason || dumpQuantity < 1) return;
+    try {
+      // 1. Fetch full user info from users collection
+      const userDocRef = doc(firestore, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      const userData = userDocSnap.exists() ? userDocSnap.data() : {};
+
+      // 2. Combine product and user data
+      const dumpData = {
+        ...selectedProduct,
+        product_id: selectedProduct.id,
+        dumped_quantity: dumpQuantity,
+        reason: dumpReason,
+        dumped_at: new Date().toISOString(),
+        dumped_by_uid: user?.uid,
+        dumped_by_name: user?.name || user?.displayName || user?.email,
+        type: 'dump_product',
+        user_info: userData, // nested user info
+      };
+
+      // 3. Add to delete_traces
+      await addDoc(collection(firestore, 'delete_traces'), dumpData);
+
+      // 4. Delete from products
+      const productRef = doc(firestore, 'products', selectedProduct.id);
+      await deleteDoc(productRef);
+
+      toast.success(`Successfully dumped ${dumpQuantity} units of ${selectedProduct.product}`);
+      setModalOpen(false);
+      setSelectedProduct(null);
+      await fetchProducts();
+    } catch (err) {
+      toast.error('Failed to dump product: ' + err.message);
+      console.error('Dump error:', err);
+    }
   };
 
   // Pagination controls
@@ -429,8 +427,11 @@ const DumpProduct = () => {
                             <button
                               className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded disabled:opacity-50"
                               onClick={() => handleDumpClick(product)}
-                              disabled={dumpedQty >= (Number(product.quantity) + dumpedQty)}
-                            >Dump</button>
+                              disabled={!canCreate('DumpProduct') || dumpedQty >= (Number(product.quantity) + dumpedQty)}
+                              title={!canCreate('DumpProduct') ? 'You do not have permission to dump products.' : ''}
+                            >
+                              Dump
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -517,8 +518,11 @@ const DumpProduct = () => {
             <button
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded w-full mt-2"
               onClick={handleDumpSubmit}
-              disabled={!dumpReason || dumpQuantity < 1}
-            >Submit</button>
+              disabled={!canCreate('DumpProduct') || !dumpReason || dumpQuantity < 1}
+              title={!canCreate('DumpProduct') ? 'You do not have permission to dump products.' : ''}
+            >
+              Submit
+            </button>
           </div>
         </div>
       )}

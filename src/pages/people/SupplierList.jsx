@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, getDoc, addDoc, runTransaction, doc as firestoreDoc } from "firebase/firestore";
 import { firestore } from "../../firebase/firebase.config";
 import GenericDeleteComponent from "../../components/GenericDeleteComponent";
 import { useSelector } from "react-redux";
@@ -31,7 +31,7 @@ const SupplierList = () => {
   const [deleteBlocked, setDeleteBlocked] = useState(false);
   const [deleteBlockMsg, setDeleteBlockMsg] = useState("");
   const currentUser = useSelector(state => state.auth?.user);
-  const { canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissions();
 
   // For view modal
   const [viewOpen, setViewOpen] = useState(false);
@@ -44,6 +44,11 @@ const SupplierList = () => {
   // New state for search
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredSuppliers, setFilteredSuppliers] = useState([]);
+
+  // Add state for add modal and form
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({ supplier_name: '', address: '', phone: '' });
+  const [addSaving, setAddSaving] = useState(false);
 
   // Fetch all suppliers on mount
   useEffect(() => {
@@ -286,7 +291,16 @@ const SupplierList = () => {
             </button>
           )}
         </div>
-        
+        {/* Add Supplier button */}
+        {canCreate(PERMISSION_PAGES.SUPPLIER_LIST) && (
+          <button
+            onClick={() => setAddOpen(true)}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors mr-2"
+            title="Add Supplier"
+          >
+            <span className="text-xl mr-2">+</span> Add Supplier
+          </button>
+        )}
         {/* Export button */}
         <button
           onClick={exportSuppliersAsCSV}
@@ -549,6 +563,113 @@ const SupplierList = () => {
               &times;
             </button>
             <ViewSupplier supplier={viewSupplier} />
+          </div>
+        </div>
+      )}
+
+      {/* Add Supplier Modal */}
+      {addOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[400px] max-w-full max-h-[90vh] overflow-y-auto relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-red-600 text-xl"
+              onClick={() => setAddOpen(false)}
+              title="Close"
+            >
+              &times;
+            </button>
+            <h2 className="text-xl font-bold mb-4">Add New Supplier</h2>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setAddSaving(true);
+                try {
+                  if (!addForm.supplier_name.trim() || !addForm.address.trim() || !addForm.phone.trim()) {
+                    alert('All fields are required.');
+                    setAddSaving(false);
+                    return;
+                  }
+                  // Firestore transaction for auto-increment supplier_id
+                  let newSupplierId;
+                  await runTransaction(firestore, async (transaction) => {
+                    const counterRef = firestoreDoc(firestore, 'counters', 'supplier');
+                    const counterSnap = await transaction.get(counterRef);
+                    let currentId = 1;
+                    if (!counterSnap.exists()) {
+                      transaction.set(counterRef, { supplier_id: 2 }); // next will be 2
+                    } else {
+                      currentId = counterSnap.data().supplier_id || 1;
+                      transaction.update(counterRef, { supplier_id: currentId + 1 });
+                    }
+                    newSupplierId = currentId;
+                  });
+                  // Add to Firestore
+                  await addDoc(collection(firestore, 'supplier_list'), {
+                    supplier_name: addForm.supplier_name.trim(),
+                    address: addForm.address.trim(),
+                    phone: addForm.phone.trim(),
+                    id: String(newSupplierId),
+                  });
+                  // Refresh list
+                  const snap = await getDocs(collection(firestore, 'supplier_list'));
+                  setSuppliers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                  setAddOpen(false);
+                  setAddForm({ supplier_name: '', address: '', phone: '' });
+                } catch (err) {
+                  alert('Failed to add supplier: ' + err.message);
+                } finally {
+                  setAddSaving(false);
+                }
+              }}
+            >
+              <div className="mb-3">
+                <label className="block text-sm font-medium mb-1">Supplier Name</label>
+                <input
+                  type="text"
+                  className="w-full border rounded px-3 py-2"
+                  value={addForm.supplier_name}
+                  onChange={e => setAddForm(f => ({ ...f, supplier_name: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium mb-1">Address</label>
+                <input
+                  type="text"
+                  className="w-full border rounded px-3 py-2"
+                  value={addForm.address}
+                  onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-sm font-medium mb-1">Phone</label>
+                <input
+                  type="text"
+                  className="w-full border rounded px-3 py-2"
+                  value={addForm.phone}
+                  onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-gray-200 rounded"
+                  onClick={() => setAddOpen(false)}
+                  disabled={addSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  disabled={addSaving}
+                >
+                  {addSaving ? 'Saving...' : 'Add Supplier'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

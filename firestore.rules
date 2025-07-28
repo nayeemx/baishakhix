@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function for role hierarchy
+    function roleLevel(role) {
+      return role == 'super_user' ? 1
+        : role == 'admin' ? 2
+        : role == 'manager' ? 3
+        : role == 'sales_man' ? 4
+        : role == 'stock_boy' ? 5
+        : role == 't_staff' ? 6
+        : 7; // user
+    }
+
+    // Helper function to check if user can manage salaries
+    function canManageSalaries() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_user', 'admin', 'manager'];
+    }
+
+    // Helper function to check if user can view their own salary data
+    function canViewOwnSalary(staffId) {
+      return request.auth.uid == staffId;
+    }
+
+    // User documents: users can read, create, and update their own document
+    // Hierarchical role assignment and permission management
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (
+        // Users can update their own document (including permissions)
+        request.auth.uid == userId ||
+        // Privileged users can update 'role' and/or 'permissions' for others
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'user' &&
+          // Only allow updating 'role' and/or 'permissions'
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'permissions']) &&
+          // If updating 'role', enforce hierarchy
+          (
+            !(request.resource.data.role is string) || (
+              request.resource.data.role != 'super_user' &&
+              roleLevel(request.resource.data.role) >= roleLevel(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)
+            )
+          )
+        )
+      );
+    }
+
+    // Salary settings: only admin/manager/super_user can manage, staff can view their own
+    match /salary_settings/{docId} {
+      allow read: if request.auth != null && (
+        canManageSalaries() || 
+        canViewOwnSalary(resource.data.staff_id)
+      );
+      allow write: if request.auth != null && canManageSalaries();
+    }
+
+    // Salary transactions: admin/manager/super_user can manage all, staff can view their own
+    match /salary_transactions/{docId} {
+      allow read: if request.auth != null && (
+        canManageSalaries() || 
+        canViewOwnSalary(resource.data.staff_id)
+      );
+      allow create, update: if request.auth != null && canManageSalaries();
+      allow delete: if request.auth != null && canManageSalaries();
+    }
+
+    // Settings documents: any authenticated user can read/write
+    match /settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Uploads meta: allow all authenticated users to add meta data to uploads collection
+    match /uploads/{docId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null;
+    }
+
+    match /uploads/{userId}/files/{docId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Allow authenticated users to write/read to any collection named after a file (e.g., products, customers, etc.)
+    match /{collectionName}/{docId} {
+      allow read, write: if request.auth != null && (
+        collectionName != "users" &&
+        collectionName != "settings" &&
+        collectionName != "uploads" &&
+        collectionName != "salary_settings" &&
+        collectionName != "salary_transactions"
+      );
+    }
+  }
+} 

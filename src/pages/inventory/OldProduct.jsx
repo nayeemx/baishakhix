@@ -26,6 +26,7 @@ import { useSelector } from 'react-redux'; // Add this import
 import { MdVisibility, MdEdit, MdDelete } from "react-icons/md"; // Add icons for actions
 import ViewOldProductModal from '../../components/Inventory/ViewOldProductModal'; // <-- create and import this component
 import EditOldProductModal from '../../components/Inventory/EditOldProductModal';
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
 const PAGE_SIZE = 28
 
@@ -79,6 +80,7 @@ const OldProduct = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const currentUser = useSelector(state => state.auth?.user);
+  const { canCreate, canEdit, canDelete } = usePermissions();
 
   const debouncedSetGlobalFilter = useMemo(
     () => debounce((value) => setGlobalFilter(value), 300),
@@ -164,26 +166,30 @@ const OldProduct = () => {
             >
               <MdVisibility className="w-5 h-5 text-blue-600" />
             </button>
-            <button
-              className="p-1 rounded bg-yellow-100 hover:bg-yellow-200"
-              title="Edit"
-              onClick={() => {
-                setEditProduct(row.original);
-                setEditOpen(true);
-              }}
-            >
-              <MdEdit className="w-5 h-5 text-yellow-600" />
-            </button>
-            <button
-              className="p-1 rounded bg-red-100 hover:bg-red-200"
-              title="Delete"
-              onClick={() => {
-                setDeleteId(row.original.id);
-                setDeleteOpen(true);
-              }}
-            >
-              <MdDelete className="w-5 h-5 text-red-600" />
-            </button>
+            {canEdit(PERMISSION_PAGES.OLD_PRODUCT) && (
+              <button
+                className="p-1 rounded bg-yellow-100 hover:bg-yellow-200"
+                title="Edit"
+                onClick={() => {
+                  setEditProduct(row.original);
+                  setEditOpen(true);
+                }}
+              >
+                <MdEdit className="w-5 h-5 text-yellow-600" />
+              </button>
+            )}
+            {canDelete(PERMISSION_PAGES.OLD_PRODUCT) && (
+              <button
+                className="p-1 rounded bg-red-100 hover:bg-red-200"
+                title="Delete"
+                onClick={() => {
+                  setDeleteId(row.original.id);
+                  setDeleteOpen(true);
+                }}
+              >
+                <MdDelete className="w-5 h-5 text-red-600" />
+              </button>
+            )}
           </div>
         ),
       },
@@ -283,20 +289,24 @@ const OldProduct = () => {
           Old Products: {products.length}
         </h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowOldUnitModal(true)}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
-            title="Manage Units"
-          >
-            <MdInventory className='w-6 h-6' />
-          </button>
-          <button
-            onClick={() => setShowAddProductModal(true)}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
-            title="Add Old Product"
-          >
-            <MdAddBox className='w-6 h-6' />
-          </button>
+          {canCreate(PERMISSION_PAGES.OLD_PRODUCT) && (
+            <button
+              onClick={() => setShowOldUnitModal(true)}
+              className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+              title="Manage Units"
+            >
+              <MdInventory className='w-6 h-6' />
+            </button>
+          )}
+          {canCreate(PERMISSION_PAGES.OLD_PRODUCT) && (
+            <button
+              onClick={() => setShowAddProductModal(true)}
+              className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+              title="Add Old Product"
+            >
+              <MdAddBox className='w-6 h-6' />
+            </button>
+          )}
           <button
             onClick={handleExport}
             className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
