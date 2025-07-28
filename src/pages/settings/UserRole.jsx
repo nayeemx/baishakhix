@@ -29,6 +29,7 @@ const pages = [
   { key: "CustomerList", label: "Customer List" },
   { key: "SupplierList", label: "Supplier List" },
   { key: "ExpenseList", label: "Expense List" },
+  { key: "Profile", label: "Profile" },
   // ...add all your pages here
 ];
 const actions = ["create", "edit", "delete"];

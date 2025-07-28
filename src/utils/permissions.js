@@ -6,7 +6,8 @@ export const PERMISSION_PAGES = {
   PRODUCT_LIST: 'ProductList',
   CUSTOMER_LIST: 'CustomerList', 
   SUPPLIER_LIST: 'SupplierList',
-  EXPENSE_LIST: 'ExpenseList'
+  EXPENSE_LIST: 'ExpenseList',
+  PROFILE: 'Profile'
 };
 
 // Define the actions that can be performed
@@ -69,9 +70,19 @@ const hasRoleBasedPermission = (role, pageKey, action) => {
     return false;
   }
 
-  // Admin and manager have all permissions except super_user specific ones
+  // Admin and manager have specific permissions, not all permissions
   if (role === 'admin' || role === 'manager') {
-    return true;
+    if (pageKey === PERMISSION_PAGES.PRODUCT_LIST) {
+      return true; // Can do everything with products
+    }
+    if (pageKey === PERMISSION_PAGES.CUSTOMER_LIST || pageKey === PERMISSION_PAGES.SUPPLIER_LIST) {
+      return true; // Can do everything with customers and suppliers
+    }
+    if (pageKey === PERMISSION_PAGES.EXPENSE_LIST) {
+      return true; // Can do everything with expenses
+    }
+    // For Profile and other pages, they need explicit permission
+    return false;
   }
 
   // Sales man can create and edit products, view customers and suppliers

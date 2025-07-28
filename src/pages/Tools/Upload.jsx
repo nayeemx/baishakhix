@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fa';
 import { useSelector } from "react-redux";
 import { Parser } from "sql-ddl-to-json-schema"; // Add this import
-import { parse as pgParse } from "pgsql-ast-parser";
+// import { parse as pgParse } from "pgsql-ast-parser";
 import * as XLSX from "xlsx"; // <-- Add this import
 
 const Upload = () => {
@@ -103,7 +103,11 @@ const Upload = () => {
   };
 
   // PGSQL to JSON conversion using pgsql-ast-parser and custom logic
+  // Temporarily disabled due to compilation issues
   const pgsqlToJson = async (sqlText) => {
+    setPgsqlError("PostgreSQL parsing is temporarily disabled. Please install Visual Studio Build Tools to enable this feature.");
+    return null;
+    /*
     try {
       setPgsqlError("");
       // Remove comments, ALTER TYPE ... OWNER TO ..., and COPY ... FROM stdin blocks
@@ -196,11 +200,12 @@ const Upload = () => {
         setPgsqlError("No INSERT or COPY data found in SQL.");
         return null;
       }
-      return dataByTable;
+            return dataByTable;
     } catch (err) {
       setPgsqlError(`Parse error: ${err.message}`);
       return null;
     }
+    */
   };
 
   // CSV to Excel conversion

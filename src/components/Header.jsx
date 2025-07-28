@@ -84,7 +84,7 @@ const Header = ({ onMobileMenuClick }) => {
 
         <nav className="flex flex-col md:flex-row justify-center md:justify-end items-center space-x-4">
           <div className="flex items-center space-x-3 my-2">
-            {user?.role !== "user" && (
+            {user && ["super_user", "admin", "manager", "salesman", "stock_boy"].includes(user.role) && (
               <Link
                 to="/pos"
                 className={`px-3 py-1 rounded font-semibold transition ${
