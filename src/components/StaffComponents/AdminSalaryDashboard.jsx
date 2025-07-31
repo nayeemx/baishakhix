@@ -126,6 +126,8 @@ const AdminSalaryDashboard = () => {
         return total + salary;
       }, 0);
 
+
+
       // Debug logging
       console.log('Staff list:', staff);
       console.log('Salary settings:', settings);

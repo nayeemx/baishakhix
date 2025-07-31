@@ -14,9 +14,13 @@ import {
 import { firestore } from '../../firebase/firebase.config';
 import { toast } from 'react-toastify';
 import { FiX, FiDollarSign, FiClock, FiList } from 'react-icons/fi';
+import AppLoader from '../AppLoader';
 
 const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
   const [loading, setLoading] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [hasHistory, setHasHistory] = useState(false);
   const [previousSalary, setPreviousSalary] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [salaryHistory, setSalaryHistory] = useState([]);
@@ -31,8 +35,13 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
     if (staff && isOpen) {
       console.log('Modal opened for staff:', staff);
       console.log('Staff ID:', staff.id);
-      fetchCurrentSalary();
-      fetchPreviousSalary();
+      setModalLoading(true);
+      Promise.all([
+        fetchCurrentSalary(),
+        checkHistoryAvailability()
+      ]).finally(() => {
+        setModalLoading(false);
+      });
     }
   }, [staff, isOpen]);
 
@@ -63,13 +72,15 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
     }
   };
 
-  const fetchPreviousSalary = async () => {
+  const checkHistoryAvailability = async () => {
     try {
       const historyQuery = query(
         collection(firestore, 'salary_history'),
         where('staff_id', '==', staff.id)
       );
       const historySnapshot = await getDocs(historyQuery);
+      
+      setHasHistory(!historySnapshot.empty);
       
       if (!historySnapshot.empty) {
         // Get all records and sort them to find the most recent one
@@ -93,12 +104,14 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
         setPreviousSalary(null);
       }
     } catch (error) {
-      console.error('Error fetching previous salary:', error);
+      console.error('Error checking history availability:', error);
+      setHasHistory(false);
     }
   };
 
   const fetchSalaryHistory = async () => {
     try {
+      setHistoryLoading(true);
       console.log('=== DEBUGGING SALARY HISTORY ===');
       console.log('Staff object:', staff);
       console.log('Staff ID being used:', staff.id);
@@ -134,6 +147,8 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
       setSalaryHistory(history);
     } catch (error) {
       console.error('Error fetching salary history:', error);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -155,7 +170,7 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
         const currentSalaryData = existingSnapshot.docs[0].data();
         const currentSalary = currentSalaryData.monthly_salary;
 
-        // If salary is actually changing, add to history
+        // Only add to history if the salary is actually different
         if (currentSalary !== newSalary) {
           // Add current salary to history before updating
           await addDoc(collection(firestore, 'salary_history'), {
@@ -167,7 +182,7 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
             notes: currentSalaryData.notes,
             changed_at: serverTimestamp(),
             changed_by: 'admin',
-            change_reason: 'Salary Reverted from History'
+            change_reason: 'Salary Changed'
           });
         }
 
@@ -176,11 +191,11 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
         await updateDoc(docRef, {
           monthly_salary: newSalary,
           effective_date: effectiveDate,
-          notes: `Reverted to historical salary from ${historicalRecord.effective_date?.toDate?.()?.toLocaleDateString() || 'N/A'}`,
+          notes: `Set to $${newSalary.toFixed(2)} from history`,
           updated_at: serverTimestamp()
         });
         
-        toast.success(`Salary reverted to $${newSalary.toFixed(2)} successfully`);
+        toast.success(`Salary set to $${newSalary.toFixed(2)} successfully`);
       } else {
         // Create new salary setting
         await addDoc(collection(firestore, 'salary_settings'), {
@@ -189,7 +204,7 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
           staff_role: staff.role,
           monthly_salary: newSalary,
           effective_date: effectiveDate,
-          notes: `Set from historical salary from ${historicalRecord.effective_date?.toDate?.()?.toLocaleDateString() || 'N/A'}`,
+          notes: `Set to $${newSalary.toFixed(2)} from history`,
           created_at: serverTimestamp(),
           updated_at: serverTimestamp()
         });
@@ -313,23 +328,31 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
 
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {modalLoading ? (
+          <div className="p-6 flex justify-center">
+            <AppLoader />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
                 Monthly Salary
               </label>
-                             <button
-                 type="button"
-                 onClick={() => {
-                   setShowHistoryModal(true);
-                   fetchSalaryHistory();
-                 }}
-                 className="flex items-center text-xs text-blue-600 hover:text-blue-800"
-               >
-                 <FiList className="w-3 h-3 mr-1" />
-                 View History
-               </button>
+              {hasHistory && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHistoryModal(true);
+                    setHistoryLoading(true);
+                    fetchSalaryHistory();
+                  }}
+                  className="flex items-center text-xs text-blue-600 hover:text-blue-800"
+                >
+                  <FiList className="w-3 h-3 mr-1" />
+                  View History
+                </button>
+              )}
             </div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
@@ -390,6 +413,7 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
             </button>
           </div>
                  </form>
+        )}
        </div>
 
        {/* Salary History Modal */}
@@ -427,36 +451,41 @@ const SalarySettingsModal = ({ isOpen, onClose, staff, onSuccess }) => {
              {/* Salary History */}
              <div className="p-6">
                <h3 className="text-lg font-semibold text-gray-800 mb-4">Previous Salaries</h3>
-               {salaryHistory.length > 0 ? (
+               {historyLoading ? (
+                 <div className="flex justify-center py-8">
+                   <AppLoader />
+                 </div>
+               ) : salaryHistory.length > 0 ? (
                  <div className="space-y-4">
-                                       {salaryHistory.map((record) => (
-                      <div key={record.id} className="bg-gray-50 p-4 rounded-lg border">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-xl font-bold text-gray-800">
-                            ${record.monthly_salary?.toFixed(2)}
-                          </span>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm text-gray-500">
-                              Changed: {record.changed_at?.toDate?.()?.toLocaleDateString() || 'N/A'}
-                            </span>
-                            <button
-                              onClick={() => handleSetHistoricalSalary(record)}
-                              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                            >
-                              Set
-                            </button>
-                          </div>
-                        </div>
-                        <div className="text-gray-600 space-y-1">
-                          <p><strong>Effective Date:</strong> {record.effective_date?.toDate?.()?.toLocaleDateString() || 'N/A'}</p>
-                          <p><strong>Changed By:</strong> {record.changed_by || 'Admin'}</p>
-                          <p><strong>Reason:</strong> {record.change_reason || 'Salary Update'}</p>
-                          {record.notes && (
-                            <p><strong>Notes:</strong> {record.notes}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                   {salaryHistory.map((record) => (
+                     <div key={record.id} className="bg-gray-50 p-4 rounded-lg border">
+                       <div className="flex justify-between items-start mb-2">
+                         <span className="text-xl font-bold text-gray-800">
+                           ${record.monthly_salary?.toFixed(2)}
+                         </span>
+                         <div className="flex items-center space-x-2">
+                           <span className="text-sm text-gray-500">
+                             Changed: {record.changed_at?.toDate?.()?.toLocaleDateString() || 'N/A'}
+                           </span>
+                           <button
+                             onClick={() => handleSetHistoricalSalary(record)}
+                             disabled={loading}
+                             className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                           >
+                             {loading ? 'Setting...' : 'Set'}
+                           </button>
+                         </div>
+                       </div>
+                       <div className="text-gray-600 space-y-1">
+                         <p><strong>Effective Date:</strong> {record.effective_date?.toDate?.()?.toLocaleDateString() || 'N/A'}</p>
+                         <p><strong>Changed By:</strong> {record.changed_by || 'Admin'}</p>
+                         <p><strong>Reason:</strong> {record.change_reason || 'Salary Update'}</p>
+                         {record.notes && (
+                           <p><strong>Notes:</strong> {record.notes}</p>
+                         )}
+                       </div>
+                     </div>
+                   ))}
                  </div>
                ) : (
                  <div className="text-center py-8">
