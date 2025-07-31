@@ -91,30 +91,6 @@ const AdminSalaryDashboard = () => {
         }
       });
 
-      // Fetch recent transactions to calculate pending payments
-      const transactionsQuery = query(
-        collection(firestore, 'salary_transactions'),
-        orderBy('date', 'desc'),
-        limit(50)
-      );
-      const transactionsSnapshot = await getDocs(transactionsQuery);
-      
-      // Calculate pending payments (negative balances)
-      let pendingCount = 0;
-      const staffBalances = {};
-      
-      transactionsSnapshot.forEach(doc => {
-        const transaction = doc.data();
-        if (!staffBalances[transaction.staff_id]) {
-          staffBalances[transaction.staff_id] = 0;
-        }
-        staffBalances[transaction.staff_id] += transaction.amount;
-      });
-
-      Object.values(staffBalances).forEach(balance => {
-        if (balance < 0) pendingCount++;
-      });
-
       // Calculate current week of the month based on Fridays
       const now = new Date();
       const currentYear = now.getFullYear();
@@ -161,6 +137,39 @@ const AdminSalaryDashboard = () => {
           }
         }
       }
+
+      // Fetch recent transactions to calculate pending payments
+      const transactionsQuery = query(
+        collection(firestore, 'salary_transactions'),
+        orderBy('date', 'desc'),
+        limit(50)
+      );
+      const transactionsSnapshot = await getDocs(transactionsQuery);
+      
+      // Calculate pending payments (staff with salary settings who haven't received weekly payment this week)
+      let pendingCount = 0;
+      
+      // Get current week's Friday date
+      const currentWeekFriday = fridaysInMonth[fridaysInMonth.length - 1];
+      const currentWeekFridayDate = new Date(currentYear, currentMonth, currentWeekFriday);
+      
+      // Check each staff member with salary settings
+      Object.keys(settings).forEach(staffId => {
+        const hasWeeklyPaymentThisWeek = transactionsSnapshot.docs.some(doc => {
+          const transaction = doc.data();
+          const transactionDate = transaction.date?.toDate?.() || new Date(transaction.date);
+          
+          return (
+            transaction.staff_id === staffId &&
+            transaction.type === 'Regular' &&
+            transactionDate.getTime() >= currentWeekFridayDate.getTime()
+          );
+        });
+        
+        if (!hasWeeklyPaymentThisWeek) {
+          pendingCount++;
+        }
+      });
 
       // Calculate total monthly salary
       const totalMonthlySalary = staff.reduce((total, member) => {
@@ -235,10 +244,13 @@ const AdminSalaryDashboard = () => {
         notes: ''
       });
 
-      toast.success('Payment processed successfully');
-      
-      // Refresh data
-      fetchStaffAndSalaries();
+             toast.success('Payment processed successfully');
+       
+       // Refresh data
+       fetchStaffAndSalaries();
+       
+       // Trigger a custom event to notify other components
+       window.dispatchEvent(new CustomEvent('salaryTransactionAdded'));
       
     } catch (error) {
       console.error('Error processing payment:', error);

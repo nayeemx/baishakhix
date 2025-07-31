@@ -7,7 +7,10 @@ import {
   getDocs, 
   where,
   orderBy,
-  limit
+  limit,
+  onSnapshot,
+  getDoc,
+  doc
 } from 'firebase/firestore';
 import { firestore } from '../../firebase/firebase.config';
 import { 
@@ -29,7 +32,7 @@ const SalaryTransactionHistory = () => {
   const [filters, setFilters] = useState({
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
     endDate: new Date().toISOString().split('T')[0],
-    viewMode: 'Weekly',
+    viewMode: 'Daily',
     selectedStaff: 'all'
   });
 
@@ -40,6 +43,34 @@ const SalaryTransactionHistory = () => {
     fetchStaffList();
     fetchTransactions();
   }, [filters, canViewAllTransactions]);
+
+  // Add real-time listener for transactions
+  useEffect(() => {
+    if (!canViewAllTransactions) return;
+
+    // Set up real-time listener for transactions
+    const transactionsQuery = query(
+      collection(firestore, 'salary_transactions'),
+      orderBy('date', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
+      // Only update if filters haven't changed (to avoid conflicts)
+      fetchTransactions();
+    });
+
+    return () => unsubscribe();
+  }, [canViewAllTransactions]);
+
+  // Listen for custom events when transactions are added
+  useEffect(() => {
+    const handleTransactionAdded = () => {
+      fetchTransactions();
+    };
+
+    window.addEventListener('salaryTransactionAdded', handleTransactionAdded);
+    return () => window.removeEventListener('salaryTransactionAdded', handleTransactionAdded);
+  }, []);
 
   const fetchStaffList = async () => {
     if (!canViewAllTransactions) return;
@@ -72,6 +103,11 @@ const SalaryTransactionHistory = () => {
     try {
       setLoading(true);
 
+      // First, ensure we have the staff list for name resolution
+      if (canViewAllTransactions && staffList.length === 0) {
+        await fetchStaffList();
+      }
+
       let transactionsQuery;
       
       if (canViewAllTransactions) {
@@ -92,7 +128,8 @@ const SalaryTransactionHistory = () => {
       const transactionsSnapshot = await getDocs(transactionsQuery);
       const allTransactions = [];
 
-      transactionsSnapshot.forEach(doc => {
+      // Process transactions and resolve staff names
+      for (const doc of transactionsSnapshot.docs) {
         const transaction = doc.data();
         const transactionDate = transaction.date?.toDate?.() || new Date(transaction.date);
         
@@ -104,20 +141,35 @@ const SalaryTransactionHistory = () => {
         if (transactionDate >= startDate && transactionDate <= endDate) {
           // Apply staff filter
           if (filters.selectedStaff === 'all' || transaction.staff_id === filters.selectedStaff) {
+            // Enhanced staff name resolution
+            let staffName = transaction.staff_name;
+            
+            // If staff_name is missing or empty, try to find it from staffList
+            if (!staffName || staffName.trim() === '') {
+              if (transaction.staff_id && staffList.length > 0) {
+                const staffMember = staffList.find(staff => staff.id === transaction.staff_id);
+                staffName = staffMember?.name || 'Unknown';
+              } else if (transaction.staff_id) {
+                // If staffList is not available, try to fetch the staff name directly
+                staffName = await getStaffNameById(transaction.staff_id);
+              }
+            }
+            
             allTransactions.push({
               id: doc.id,
               ...transaction,
+              staff_name: staffName,
               date: transactionDate
             });
           }
         }
-      });
+      }
 
       // Apply view mode grouping
       let processedTransactions = allTransactions;
       
       if (filters.viewMode === 'Weekly') {
-        // Group by week
+        // Group by week but show individual transactions
         const weeklyGroups = {};
         allTransactions.forEach(transaction => {
           const weekStart = getWeekStart(transaction.date);
@@ -129,18 +181,29 @@ const SalaryTransactionHistory = () => {
           weeklyGroups[weekKey].push(transaction);
         });
 
-        processedTransactions = Object.entries(weeklyGroups).map(([weekKey, weekTransactions]) => {
-          const totalAmount = weekTransactions.reduce((sum, t) => sum + t.amount, 0);
-          return {
-            id: weekKey,
-            date: new Date(weekKey),
-            type: 'Weekly Summary',
-            amount: totalAmount,
-            notes: `Week of ${new Date(weekKey).toLocaleDateString()} - ${weekTransactions.length} transactions`,
-            isSummary: true,
-            transactions: weekTransactions
-          };
-        }).sort((a, b) => b.date - a.date);
+        // Flatten all transactions but add week information
+        processedTransactions = [];
+        Object.entries(weeklyGroups).forEach(([weekKey, weekTransactions]) => {
+          weekTransactions.forEach(transaction => {
+            const weekStartDate = new Date(weekKey);
+            const weekEndDate = new Date(weekStartDate);
+            weekEndDate.setDate(weekStartDate.getDate() + 6);
+            
+            processedTransactions.push({
+              ...transaction,
+              weekStart: weekStartDate,
+              weekLabel: `Week of ${weekStartDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${weekEndDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+            });
+          });
+        });
+        
+        // Sort by week start date (descending) then by transaction date (descending)
+        processedTransactions.sort((a, b) => {
+          if (a.weekStart.getTime() !== b.weekStart.getTime()) {
+            return b.weekStart - a.weekStart;
+          }
+          return b.date - a.date;
+        });
       }
 
       setTransactions(processedTransactions);
@@ -156,14 +219,30 @@ const SalaryTransactionHistory = () => {
   const getWeekStart = (date) => {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-    return new Date(d.setDate(diff));
+    // Calculate the start of the week (Sunday = 0)
+    // Get the start of the week (Sunday)
+    const daysToSubtract = day;
+    const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - daysToSubtract);
+    return weekStart;
+  };
+
+  const getStaffNameById = async (staffId) => {
+    try {
+      const staffDoc = await getDoc(doc(firestore, 'users', staffId));
+      if (staffDoc.exists()) {
+        return staffDoc.data().name || 'Unknown';
+      }
+      return 'Unknown';
+    } catch (error) {
+      console.error('Error fetching staff name:', error);
+      return 'Unknown';
+    }
   };
 
   const exportToCSV = () => {
     try {
       const csvData = transactions.map(transaction => ({
-        Date: transaction.date.toLocaleDateString(),
+        Date: transaction.date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
         Staff: transaction.staff_name || 'N/A',
         Amount: transaction.amount,
         Type: transaction.type,
@@ -289,83 +368,128 @@ const SalaryTransactionHistory = () => {
         )}
       </div>
 
-      {/* Transaction Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                DATE
-              </th>
-              {canViewAllTransactions && (
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  STAFF
-                </th>
-              )}
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                AMOUNT
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                TYPE
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                NOTES
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                RUNNING BALANCE
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {transactions.length > 0 ? (
-              transactions.map((transaction) => (
-                <tr key={transaction.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.date.toLocaleDateString()}
-                  </td>
-                  {canViewAllTransactions && (
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                          <span className="text-xs font-medium text-gray-600">
-                            {transaction.staff_name?.charAt(0) || 'U'}
-                          </span>
-                        </div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {transaction.staff_name || 'Unknown'}
-                        </div>
-                      </div>
-                    </td>
-                  )}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-medium ${
-                      transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.type}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
-                    {transaction.notes || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${calculateRunningBalance(transaction.id).toLocaleString()}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={canViewAllTransactions ? 6 : 5} className="px-6 py-8 text-center text-gray-500">
-                  <FiCalendar className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                  <p>No transactions found for the selected filters</p>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+             {/* Transaction Table */}
+       <div className="overflow-x-auto">
+         <table className="min-w-full divide-y divide-gray-200">
+           <thead className="bg-gray-50">
+             <tr>
+               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                 DATE
+               </th>
+               {canViewAllTransactions && (
+                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                   STAFF
+                 </th>
+               )}
+               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                 AMOUNT
+               </th>
+               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                 TYPE
+               </th>
+               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                 NOTES
+               </th>
+               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                 RUNNING BALANCE
+               </th>
+             </tr>
+           </thead>
+           <tbody className="bg-white divide-y divide-gray-200">
+             {transactions.length > 0 ? (
+               transactions.map((transaction) => (
+                 <tr key={transaction.id} className="hover:bg-gray-50">
+                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                     {filters.viewMode === 'Weekly' && transaction.weekLabel ? (
+                       <div>
+                         <div className="font-medium text-purple-600">{transaction.weekLabel}</div>
+                         <div className="text-xs text-gray-500">{transaction.date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                       </div>
+                     ) : (
+                       transaction.date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                     )}
+                   </td>
+                   {canViewAllTransactions && (
+                     <td className="px-6 py-4 whitespace-nowrap">
+                       <div className="flex items-center">
+                         <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                           <span className="text-xs font-medium text-gray-600">
+                             {transaction.staff_name?.charAt(0) || 'U'}
+                           </span>
+                         </div>
+                         <div className="text-sm font-medium text-gray-900">
+                           {transaction.staff_name || 'Unknown'}
+                         </div>
+                       </div>
+                     </td>
+                   )}
+                   <td className="px-6 py-4 whitespace-nowrap">
+                     <span className={`text-sm font-medium ${
+                       transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                     }`}>
+                       {transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
+                     </span>
+                   </td>
+                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                     {transaction.type}
+                   </td>
+                   <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
+                     {transaction.notes || '-'}
+                   </td>
+                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                     ${calculateRunningBalance(transaction.id).toLocaleString()}
+                   </td>
+                 </tr>
+               ))
+             ) : (
+               <tr>
+                 <td colSpan={canViewAllTransactions ? 6 : 5} className="px-6 py-8 text-center text-gray-500">
+                   <FiCalendar className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                   <p>No transactions found for the selected filters</p>
+                 </td>
+               </tr>
+             )}
+             
+             {/* Summary Row */}
+             {transactions.length > 0 && (
+               <tr className="bg-gray-50 border-t-2 border-gray-300">
+                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                   SUMMARY
+                 </td>
+                 {canViewAllTransactions && (
+                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                     {(() => {
+                       const uniqueStaff = [...new Set(transactions.map(t => t.staff_name).filter(name => name && name !== 'Unknown'))];
+                       return `${uniqueStaff.length} Staff Members`;
+                     })()}
+                   </td>
+                 )}
+                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">
+                   ${(() => {
+                     const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
+                     return totalAmount.toLocaleString();
+                   })()}
+                 </td>
+                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                   {(() => {
+                     const uniqueTypes = [...new Set(transactions.map(t => t.type))];
+                     return uniqueTypes.join(', ');
+                   })()}
+                 </td>
+                 <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                   {transactions.length} Transactions
+                 </td>
+                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                   ${(() => {
+                     const totalBalance = transactions.reduce((sum, t) => sum + t.amount, 0);
+                     return totalBalance.toLocaleString();
+                   })()}
+                 </td>
+               </tr>
+             )}
+           </tbody>
+         </table>
+       </div>
     </div>
   );
 };
