@@ -84,7 +84,11 @@ const AdminSalaryDashboard = () => {
       const settings = {};
       
       salarySettingsSnapshot.forEach(doc => {
-        settings[doc.id] = doc.data();
+        const data = doc.data();
+        // Use staff_id as the key instead of document ID
+        if (data.staff_id) {
+          settings[data.staff_id] = data;
+        }
       });
 
       // Fetch recent transactions to calculate pending payments
@@ -122,6 +126,19 @@ const AdminSalaryDashboard = () => {
         return total + salary;
       }, 0);
 
+      // Debug logging
+      console.log('Staff list:', staff);
+      console.log('Salary settings:', settings);
+      
+      // Check specific staff member
+      const ishtieaq = staff.find(s => s.name === 'Ishtieaq Nayeem');
+      if (ishtieaq) {
+        console.log('Ishtieaq staff data:', ishtieaq);
+        console.log('Ishtieaq salary lookup:', settings[ishtieaq.id]);
+        console.log('Ishtieaq staff.id:', ishtieaq.id);
+        console.log('Available salary keys:', Object.keys(settings));
+      }
+      
       setStaffList(staff);
       setSalarySettings(settings);
       setSummary({
