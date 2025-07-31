@@ -115,10 +115,52 @@ const AdminSalaryDashboard = () => {
         if (balance < 0) pendingCount++;
       });
 
-      // Calculate current week (simple calculation)
+      // Calculate current week of the month based on Fridays
       const now = new Date();
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      const currentWeek = Math.ceil((now - startOfYear) / (7 * 24 * 60 * 60 * 1000));
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const currentDate = now.getDate();
+      
+      // Find all Fridays in the current month
+      const fridaysInMonth = [];
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        if (date.getDay() === 5) { // 5 = Friday
+          fridaysInMonth.push(day);
+        }
+      }
+      
+      // Calculate current week based on which Friday period we're in
+      let currentWeekOfMonth = 1;
+      
+      if (fridaysInMonth.length === 0) {
+        // No Fridays in this month (very rare, but possible)
+        currentWeekOfMonth = 1;
+      } else if (currentDate <= fridaysInMonth[0]) {
+        // Before or on the first Friday = Week 1
+        currentWeekOfMonth = 1;
+      } else {
+        // Find which Friday period we're in
+        for (let i = 0; i < fridaysInMonth.length; i++) {
+          const currentFriday = fridaysInMonth[i];
+          const nextFriday = fridaysInMonth[i + 1];
+          
+          if (nextFriday) {
+            // If we're between this Friday and the next Friday
+            if (currentDate > currentFriday && currentDate <= nextFriday) {
+              currentWeekOfMonth = i + 2; // +2 because we're in the period after this Friday
+              break;
+            }
+          } else {
+            // We're past the last Friday
+            if (currentDate > currentFriday) {
+              currentWeekOfMonth = fridaysInMonth.length;
+            }
+          }
+        }
+      }
 
       // Calculate total monthly salary
       const totalMonthlySalary = staff.reduce((total, member) => {
@@ -146,7 +188,7 @@ const AdminSalaryDashboard = () => {
       setSummary({
         totalStaff: staff.length,
         totalMonthlySalary,
-        currentWeek,
+        currentWeek: currentWeekOfMonth,
         pendingPayments: pendingCount
       });
 
@@ -253,7 +295,7 @@ const AdminSalaryDashboard = () => {
               <FiCalendar className="w-6 h-6 text-yellow-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Current Week</p>
+              <p className="text-sm font-medium text-gray-600">Week of Month</p>
               <p className="text-2xl font-bold text-gray-900">Week {summary.currentWeek}</p>
             </div>
           </div>
