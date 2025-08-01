@@ -310,6 +310,9 @@ const SalaryTransactionHistory = () => {
         Staff: transaction.staff_name || 'N/A',
         Amount: transaction.amount,
         Type: transaction.type,
+        Overtime_Details: transaction.type === 'Overtime' && transaction.overtimeHours && transaction.overtimeRate 
+          ? `${transaction.overtimeHours}h @ $${transaction.overtimeRate}/h` 
+          : '',
         Notes: transaction.notes || '',
         Running_Balance: calculateRunningBalance(transaction.id).toFixed(2)
       }));
@@ -343,6 +346,7 @@ const SalaryTransactionHistory = () => {
           Staff: `${uniqueStaff.length} Staff Members`,
           Amount: totalAmount,
           Type: uniqueTypes.join(', '),
+          Overtime_Details: '',
           Notes: `${transactions.length} Transactions`,
           Running_Balance: totalBalance.toFixed(2)
         });
@@ -387,7 +391,9 @@ const SalaryTransactionHistory = () => {
             transaction.date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
             transaction.staff_name || 'Unknown',
             `${transaction.amount > 0 ? '+' : ''}${transaction.amount}`,
-            transaction.type,
+            transaction.type + (transaction.type === 'Overtime' && transaction.overtimeHours && transaction.overtimeRate 
+              ? ` (${transaction.overtimeHours}h @ $${transaction.overtimeRate}/h)` 
+              : ''),
             transaction.notes || '-',
             calculateRunningBalance(transaction.id).toFixed(2)
           ]);
@@ -572,19 +578,19 @@ const SalaryTransactionHistory = () => {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6" id="transaction-history">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
         <h2 className="text-xl font-bold text-gray-800">Transaction History</h2>
-        <div className="flex space-x-2">
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
           <button
             onClick={exportToCSV}
-            className="flex items-center px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            className="flex items-center justify-center px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
           >
             <FiDownload className="w-4 h-4 mr-2" />
             Export CSV
           </button>
           <button
             onClick={exportToPDF}
-            className="flex items-center px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            className="flex items-center justify-center px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
           >
             <FiFileText className="w-4 h-4 mr-2" />
             Export PDF
@@ -593,7 +599,7 @@ const SalaryTransactionHistory = () => {
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
           <input
@@ -648,34 +654,34 @@ const SalaryTransactionHistory = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 DATE
               </th>
               {canViewAllTransactions && (
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   STAFF
                 </th>
               )}
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 AMOUNT
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 TYPE
               </th>
-
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 NOTES
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 RUNNING BALANCE
               </th>
             </tr>
           </thead>
+          
           <tbody className="bg-white divide-y divide-gray-200">
             {transactions.length > 0 ? (
               transactions.map((transaction) => (
                 <tr key={transaction.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {filters.viewMode === 'Weekly' && transaction.weekLabel ? (
                       <div>
                         <div className="font-medium text-purple-600">{transaction.weekLabel}</div>
@@ -686,27 +692,27 @@ const SalaryTransactionHistory = () => {
                     )}
                   </td>
                   {canViewAllTransactions && (
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-300 rounded-full flex items-center justify-center mr-2 sm:mr-3">
                           <span className="text-xs font-medium text-gray-600">
                             {transaction.staff_name?.charAt(0) || 'U'}
                           </span>
                         </div>
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-gray-900 truncate">
                           {transaction.staff_name || 'Unknown'}
                         </div>
                       </div>
                     </td>
                   )}
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                     <span className={`text-sm font-medium ${
                       transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
                       {transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       transaction.type === 'Repayment' 
                         ? 'bg-green-100 text-green-800' 
@@ -716,22 +722,29 @@ const SalaryTransactionHistory = () => {
                         ? 'bg-yellow-100 text-yellow-800'
                         : transaction.type === 'Extra_Payment'
                         ? 'bg-orange-100 text-orange-800'
+                        : transaction.type === 'Overtime'
+                        ? 'bg-purple-100 text-purple-800'
                         : 'bg-blue-100 text-blue-800'
                     }`}>
                       {transaction.type}
+                      {transaction.type === 'Overtime' && transaction.overtimeHours && transaction.overtimeRate && (
+                        <span className="ml-1 text-xs opacity-75">
+                          ({transaction.overtimeHours}h @ ${transaction.overtimeRate}/h)
+                        </span>
+                      )}
                     </span>
                   </td>
 
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
+                  <td className="px-3 sm:px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
                     {transaction.notes || '-'}
                   </td>
-                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                     <span className={`font-medium ${
-                       calculateRunningBalance(transaction.id) >= 0 ? 'text-green-600' : 'text-red-600'
-                     }`}>
-                       ${calculateRunningBalance(transaction.id).toFixed(2)}
-                     </span>
-                   </td>
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <span className={`font-medium ${
+                      calculateRunningBalance(transaction.id) >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      ${calculateRunningBalance(transaction.id).toFixed(2)}
+                    </span>
+                  </td>
                 </tr>
               ))
             ) : (
@@ -746,34 +759,34 @@ const SalaryTransactionHistory = () => {
             {/* Summary Row */}
             {transactions.length > 0 && (
               <tr className="bg-gray-50 border-t-2 border-gray-300">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                   SUMMARY
                 </td>
                 {canViewAllTransactions && (
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                  <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                     {(() => {
                       const uniqueStaff = [...new Set(transactions.map(t => t.staff_name).filter(name => name && name !== 'Unknown'))];
                       return `${uniqueStaff.length} Staff Members`;
                     })()}
                   </td>
                 )}
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">
                   ${(() => {
                     const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
                     return totalAmount.toLocaleString();
                   })()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                   {(() => {
                     const uniqueTypes = [...new Set(transactions.map(t => t.type))];
                     return uniqueTypes.join(', ');
                   })()}
                 </td>
 
-                <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                <td className="px-3 sm:px-6 py-4 text-sm font-bold text-gray-900">
                   {transactions.length} Transactions
                 </td>
-                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold">
+                <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-bold">
                    <span className={`${
                      (() => {
                        // Calculate the final running balance for each staff member and sum them
@@ -798,7 +811,7 @@ const SalaryTransactionHistory = () => {
                        return totalBalance >= 0 ? 'text-green-600' : 'text-red-600';
                      })()
                    }`}>
-                     ${(() => {
+                  ${(() => {
                        // Calculate the final running balance for each staff member and sum them
                        const staffBalances = {};
                        
@@ -818,10 +831,10 @@ const SalaryTransactionHistory = () => {
                          return sum + staff.balance;
                        }, 0);
                        
-                       return totalBalance.toLocaleString();
-                     })()}
+                    return totalBalance.toLocaleString();
+                  })()}
                    </span>
-                 </td>
+                </td>
               </tr>
             )}
           </tbody>

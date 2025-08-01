@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { firestore } from '../../firebase/firebase.config';
 import { toast } from 'react-toastify';
+import AppLoader from '../../components/AppLoader';
 
 const roleHierarchy = [
   'super_user',
@@ -42,6 +43,7 @@ const pages = [
   { key: "ToDo", label: "To-Do List" },
   { key: "SupplierAdjustment", label: "Supplier Adjustment" },
   { key: "OldProduct", label: "Old Product" },
+  { key: "Salary", label: "Salary Management" },
 ];
 const actions = ["create", "edit", "delete"];
 
@@ -211,11 +213,7 @@ const UserRole = () => {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <AppLoader />;
   }
 
   if (!canManageRoles) {

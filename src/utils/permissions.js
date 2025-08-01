@@ -12,6 +12,7 @@ export const PERMISSION_PAGES = {
   PROFILE: 'Profile',
   OLD_PRODUCT: 'OldProduct',
   SUPPLIER_ADJUSTMENT: 'SupplierAdjustment',
+  SALARY: 'Salary',
 };
 
 // Define the actions that can be performed

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -21,14 +22,18 @@ import {
   FiCalendar, 
   FiAlertTriangle,
   FiDownload,
-  FiFileText
+  FiFileText,
+  FiUser
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import SalarySettingsModal from './SalarySettingsModal';
-import Loader from '../Loader';
+import AppLoader from '../AppLoader';
+import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
-const AdminSalaryDashboard = () => {
+const AdminSalaryDashboard = ({ showOnlySummary = false }) => {
   const { user } = useSelector(state => state.auth);
+  const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
   const [staffList, setStaffList] = useState([]);
   const [salarySettings, setSalarySettings] = useState({});
   const [loading, setLoading] = useState(true);
@@ -55,7 +60,9 @@ const AdminSalaryDashboard = () => {
     amount: '',
     date: new Date().toISOString().split('T')[0],
     type: 'Regular',
-    notes: ''
+    notes: '',
+    overtimeHours: '',
+    overtimeRate: ''
   });
 
   // Fetch staff and salary data
@@ -365,9 +372,31 @@ const AdminSalaryDashboard = () => {
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     
+    // Check permission to process salary payments
+    if (!hasPermission(PERMISSION_PAGES.SALARY, 'create')) {
+      toast.error('You do not have permission to process salary payments');
+      return;
+    }
+    
     if (!paymentForm.selectedStaff || !paymentForm.amount) {
       toast.error('Please select staff and enter a valid amount');
       return;
+    }
+
+    // Additional validation for overtime payments
+    if (paymentForm.type === 'Overtime') {
+      if (!paymentForm.overtimeHours || !paymentForm.overtimeRate) {
+        toast.error('Please enter both overtime hours and rate');
+        return;
+      }
+      
+      const overtimeHours = parseFloat(paymentForm.overtimeHours);
+      const overtimeRate = parseFloat(paymentForm.overtimeRate);
+      
+      if (overtimeHours <= 0 || overtimeRate <= 0) {
+        toast.error('Please enter valid overtime hours and rate');
+        return;
+      }
     }
 
     const amount = parseFloat(paymentForm.amount);
@@ -390,7 +419,12 @@ const AdminSalaryDashboard = () => {
         date: new Date(paymentForm.date),
         processed_by: user.uid,
         processed_by_name: user.name || user.displayName || user.email,
-        created_at: serverTimestamp()
+        created_at: serverTimestamp(),
+        // Add overtime data if it's an overtime payment
+        ...(paymentForm.type === 'Overtime' && {
+          overtimeHours: parseFloat(paymentForm.overtimeHours) || 0,
+          overtimeRate: parseFloat(paymentForm.overtimeRate) || 0
+        })
       };
 
       await addDoc(collection(firestore, 'salary_transactions'), transactionData);
@@ -401,7 +435,9 @@ const AdminSalaryDashboard = () => {
         amount: '',
         date: new Date().toISOString().split('T')[0],
         type: 'Regular',
-        notes: ''
+        notes: '',
+        overtimeHours: '',
+        overtimeRate: ''
       });
 
       toast.success('Payment processed successfully');
@@ -421,17 +457,36 @@ const AdminSalaryDashboard = () => {
   };
 
   const openSalarySettingsModal = (staff) => {
+    // Check permission to edit salary settings
+    if (!hasPermission(PERMISSION_PAGES.SALARY, 'edit')) {
+      toast.error('You do not have permission to modify salary settings');
+      return;
+    }
+    
     setSelectedStaffForSalary(staff);
     setShowSalaryModal(true);
   };
 
+  // Auto-calculate overtime amount when hours or rate changes
+  const calculateOvertimeAmount = (hours, rate) => {
+    const overtimeHours = parseFloat(hours) || 0;
+    const overtimeRate = parseFloat(rate) || 0;
+    return (overtimeHours * overtimeRate).toFixed(2);
+  };
+
+  const navigateToStaffDashboard = () => {
+    // Navigate to a route that shows only the staff dashboard
+    // We'll need to create a new route or modify the existing one
+    navigate('/staff/salary?view=personal');
+  };
+
   if (loading) {
-    return <Loader />;
+    return <AppLoader />;
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Summary Cards */}
+  // If only summary is requested, render just the summary cards
+  if (showOnlySummary) {
+    return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center">
@@ -509,10 +564,34 @@ const AdminSalaryDashboard = () => {
           </div>
         </div>
       </div>
+    );
+  }
 
+  return (
+    <div className="space-y-6">
       {/* Payment Processing */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-6">Payment Processing</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-800">Payment Processing</h2>
+          <button
+            onClick={navigateToStaffDashboard}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <FiUser className="w-4 h-4 mr-2" />
+            My Salary Dashboard
+          </button>
+        </div>
+        
+        {!hasPermission(PERMISSION_PAGES.SALARY, 'create') && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+            <div className="flex items-center">
+              <FiAlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+              <p className="text-yellow-800 text-sm">
+                You do not have permission to process salary payments. Contact your administrator to request access.
+              </p>
+            </div>
+          </div>
+        )}
         
         <form onSubmit={handlePaymentSubmit} className="space-y-4">
           {/* Staff Selection */}
@@ -520,78 +599,102 @@ const AdminSalaryDashboard = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Staff
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 gap-4 overflow-y-auto">
               {staffList.map((staff) => (
                 <div
                   key={staff.id}
-                  className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                  className={`p-2 border rounded-lg cursor-pointer transition-colors ${
                     paymentForm.selectedStaff?.id === staff.id
                       ? 'border-purple-500 bg-purple-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   onClick={() => setPaymentForm(prev => ({ ...prev, selectedStaff: staff }))}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                  <div className="flex flex-col space-y-3">
+                    {/* Staff Info */}
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
                         <span className="text-sm font-medium text-gray-600">
                           {staff.name?.charAt(0) || 'U'}
                         </span>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{staff.name}</p>
-                        <p className="text-sm text-gray-500">{staff.role}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-900 truncate">{staff.name}</p>
+                        <p className="text-sm text-gray-500 truncate">{staff.role}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-900">
-                        ${salarySettings[staff.id]?.monthly_salary || 0}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Weekly: ${((salarySettings[staff.id]?.monthly_salary || 0) / 4).toFixed(2)}
-                      </p>
-                      {staffCalculations[staff.id] && (
-                        <div className="text-xs space-y-1 mt-1">
-                          {staffCalculations[staff.id].carryover > 0 && (
-                            <p className="text-green-600">
-                              Carryover: +${staffCalculations[staff.id].carryover.toFixed(2)}
-                            </p>
-                          )}
-                          {staffCalculations[staff.id].extraPayments > 0 && (
-                            <p className="text-red-600">
-                              Extra: -${staffCalculations[staff.id].extraPayments.toFixed(2)}
-                            </p>
-                          )}
-                          <p className="text-blue-600 font-medium">
-                            Available: ${staffCalculations[staff.id].availableThisMonth.toFixed(2)}
-                          </p>
+                    
+                    {/* Salary Info */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Monthly:</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          ${salarySettings[staff.id]?.monthly_salary || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Weekly:</span>
+                        <span className="text-sm text-gray-500">
+                          ${((salarySettings[staff.id]?.monthly_salary || 0) / 4).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Calculations */}
+                    {staffCalculations[staff.id] && (
+                      <div className="space-y-1 text-xs">
+                        {staffCalculations[staff.id].carryover > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Carryover:</span>
+                            <span className="text-green-600 font-medium">
+                              +${staffCalculations[staff.id].carryover.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        {staffCalculations[staff.id].extraPayments > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Extra:</span>
+                            <span className="text-red-600 font-medium">
+                              -${staffCalculations[staff.id].extraPayments.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1 border-t border-gray-100">
+                          <span className="text-gray-700 font-medium">Available:</span>
+                          <span className="text-blue-600 font-medium">
+                            ${staffCalculations[staff.id].availableThisMonth.toFixed(2)}
+                          </span>
                         </div>
-                      )}
-                      <div className="flex space-x-2 mt-1">
+                      </div>
+                    )}
+                    
+                    {/* Action Buttons */}
+                    <div className="flex space-x-2 pt-2 border-t border-gray-100">
+                      {hasPermission(PERMISSION_PAGES.SALARY, 'edit') && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             openSalarySettingsModal(staff);
                           }}
-                          className="text-xs text-purple-600 hover:text-purple-800"
+                          className="flex-1 text-xs text-purple-600 hover:text-purple-800 py-1 px-2 rounded hover:bg-purple-50 transition-colors"
                         >
                           Set Salary
                         </button>
-                        {staffCalculations[staff.id] && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedStaffForDetails(staff);
-                              setShowDetailsModal(true);
-                            }}
-                            className="text-xs text-blue-600 hover:text-blue-800"
-                          >
-                            Details
-                          </button>
-                        )}
-                      </div>
+                      )}
+                      {staffCalculations[staff.id] && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedStaffForDetails(staff);
+                            setShowDetailsModal(true);
+                          }}
+                          className="flex-1 text-xs text-blue-600 hover:text-blue-800 py-1 px-2 rounded hover:bg-blue-50 transition-colors"
+                        >
+                          Details
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -599,7 +702,7 @@ const AdminSalaryDashboard = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Payment Amount */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -636,10 +739,21 @@ const AdminSalaryDashboard = () => {
               </label>
               <select
                 value={paymentForm.type}
-                onChange={(e) => setPaymentForm(prev => ({ ...prev, type: e.target.value }))}
+                onChange={(e) => {
+                  const newType = e.target.value;
+                  setPaymentForm(prev => ({ 
+                    ...prev, 
+                    type: newType,
+                    // Auto-calculate amount if switching to overtime and hours/rate are available
+                    amount: newType === 'Overtime' && prev.overtimeHours && prev.overtimeRate 
+                      ? calculateOvertimeAmount(prev.overtimeHours, prev.overtimeRate) 
+                      : prev.amount
+                  }));
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 <option value="Regular">Regular (Weekly Salary)</option>
+                <option value="Overtime">Overtime</option>
                 <option value="Extra_Payment">Extra Payment</option>
                 <option value="Repayment">Adjustment</option>
                 <option value="Fine">Fine (Deduction)</option>
@@ -651,13 +765,65 @@ const AdminSalaryDashboard = () => {
             <div className="flex items-end">
               <button
                 type="submit"
-                disabled={processing || !paymentForm.selectedStaff || !paymentForm.amount}
+                disabled={processing || !paymentForm.selectedStaff || !paymentForm.amount || !hasPermission(PERMISSION_PAGES.SALARY, 'create')}
                 className="w-full bg-purple-600 text-white py-2 px-4 rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                title={!hasPermission(PERMISSION_PAGES.SALARY, 'create') ? 'You do not have permission to process salary payments' : ''}
               >
-                {processing ? 'Processing...' : 'Process Payment'}
+                {processing ? 'Processing...' : 'Payment'}
               </button>
             </div>
           </div>
+
+          {/* Overtime Fields - Show only when payment type is Overtime */}
+          {paymentForm.type === 'Overtime' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Overtime Hours */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Overtime Hours
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={paymentForm.overtimeHours}
+                  onChange={(e) => {
+                    const hours = e.target.value;
+                    setPaymentForm(prev => ({ 
+                      ...prev, 
+                      overtimeHours: hours,
+                      amount: paymentForm.type === 'Overtime' ? calculateOvertimeAmount(hours, prev.overtimeRate) : prev.amount
+                    }));
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="0.0"
+                />
+              </div>
+
+              {/* Overtime Rate */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Overtime Rate (per hour)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentForm.overtimeRate}
+                  onChange={(e) => {
+                    const rate = e.target.value;
+                    setPaymentForm(prev => ({ 
+                      ...prev, 
+                      overtimeRate: rate,
+                      amount: paymentForm.type === 'Overtime' ? calculateOvertimeAmount(prev.overtimeHours, rate) : prev.amount
+                    }));
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="$ 0.00"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           <div>
@@ -758,16 +924,18 @@ const AdminSalaryDashboard = () => {
 
                   {/* Action Buttons */}
                   <div className="flex justify-end space-x-3 pt-4 border-t">
-                    <button
-                      onClick={() => {
-                        setShowDetailsModal(false);
-                        setSelectedStaffForSalary(selectedStaffForDetails);
-                        setShowSalaryModal(true);
-                      }}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                    >
-                      Edit Salary Settings
-                    </button>
+                    {hasPermission(PERMISSION_PAGES.SALARY, 'edit') && (
+                      <button
+                        onClick={() => {
+                          setShowDetailsModal(false);
+                          setSelectedStaffForSalary(selectedStaffForDetails);
+                          setShowSalaryModal(true);
+                        }}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                      >
+                        Edit Salary Settings
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowDetailsModal(false)}
                       className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
