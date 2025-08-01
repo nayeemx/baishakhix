@@ -26,6 +26,9 @@ const SalaryList = () => {
         <div className="mt-8">
           <SalaryTransactionHistory />
         </div>
+        
+        {/* Migration Tool - Only show to super_user for safety */}
+
       </div>
     </div>
   );

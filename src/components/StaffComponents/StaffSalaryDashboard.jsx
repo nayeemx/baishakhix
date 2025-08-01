@@ -6,7 +6,8 @@ import {
   getDocs, 
   where,
   orderBy,
-  limit
+  limit,
+  onSnapshot
 } from 'firebase/firestore';
 import { firestore } from '../../firebase/firebase.config';
 import { 
@@ -19,6 +20,7 @@ import {
   FiAlertTriangle
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import Loader from '../Loader';
 
 const StaffSalaryDashboard = () => {
   const { user } = useSelector(state => state.auth);
@@ -36,6 +38,51 @@ const StaffSalaryDashboard = () => {
       fetchSalaryData();
     }
   }, [user]);
+
+  // Add real-time listener for salary transactions
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const transactionsQuery = query(
+      collection(firestore, 'salary_transactions'),
+      where('staff_id', '==', user.uid),
+      orderBy('date', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
+      // Refresh data when transactions change
+      fetchSalaryData();
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Add real-time listener for salary settings
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const salarySettingsQuery = query(
+      collection(firestore, 'salary_settings'),
+      where('staff_id', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(salarySettingsQuery, (snapshot) => {
+      // Refresh data when salary settings change
+      fetchSalaryData();
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Listen for custom events when transactions are added
+  useEffect(() => {
+    const handleTransactionAdded = () => {
+      fetchSalaryData();
+    };
+
+    window.addEventListener('salaryTransactionAdded', handleTransactionAdded);
+    return () => window.removeEventListener('salaryTransactionAdded', handleTransactionAdded);
+  }, []);
 
   const fetchSalaryData = async () => {
     try {
@@ -114,11 +161,7 @@ const StaffSalaryDashboard = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-      </div>
-    );
+    return <Loader />;
   }
 
   return (
