@@ -67,6 +67,20 @@ service cloud.firestore {
       allow delete: if request.auth != null && canManageSalaries();
     }
 
+    // Attendance records: admin/manager/super_user can manage all, staff can view their own
+    match /attendance_records/{docId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_user', 'admin', 'manager'] ||
+        resource.data.staffId == request.auth.uid
+      );
+      allow create, update: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_user', 'admin', 'manager']
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_user', 'admin', 'manager']
+      );
+    }
+
     
 
     // Settings documents: any authenticated user can read/write
@@ -93,7 +107,8 @@ match /{collectionName}/{docId} {
     collectionName != "settings" &&
     collectionName != "uploads" &&
     collectionName != "salary_settings" &&
-    collectionName != "salary_transactions"
+    collectionName != "salary_transactions" &&
+    collectionName != "attendance_records"
   );
 }
   }

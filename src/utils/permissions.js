@@ -13,6 +13,7 @@ export const PERMISSION_PAGES = {
   OLD_PRODUCT: 'OldProduct',
   SUPPLIER_ADJUSTMENT: 'SupplierAdjustment',
   SALARY: 'Salary',
+  ATTENDANCE: 'Attendance',
 };
 
 // Define the actions that can be performed
@@ -85,6 +86,9 @@ const hasRoleBasedPermission = (role, pageKey, action) => {
     }
     if (pageKey === PERMISSION_PAGES.EXPENSE_LIST) {
       return true; // Can do everything with expenses
+    }
+    if (pageKey === PERMISSION_PAGES.ATTENDANCE) {
+      return true; // Can do everything with attendance (but super_user won't appear in staff list)
     }
     // For Profile and other pages, they need explicit permission
     return false;

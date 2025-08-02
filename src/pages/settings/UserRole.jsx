@@ -44,6 +44,7 @@ const pages = [
   { key: "SupplierAdjustment", label: "Supplier Adjustment" },
   { key: "OldProduct", label: "Old Product" },
   { key: "Salary", label: "Salary Management" },
+  { key: "Attendance", label: "Attendance Management" },
 ];
 const actions = ["create", "edit", "delete"];
 
