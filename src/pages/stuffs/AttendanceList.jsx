@@ -21,23 +21,28 @@ import {
   FiUser,
   FiEye,
   FiPrinter,
-  FiDownload
+  FiDownload,
+  FiEdit3,
+  FiPlus
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import AppLoader from '../../components/AppLoader';
 import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 import dayjs from 'dayjs';
 import AttendanceModal from '../../components/StaffComponents/AttendanceModal';
+import AttendanceEditModal from '../../components/StaffComponents/AttendanceEditModal';
 
 const AttendanceList = () => {
   const { hasPermission } = usePermissions();
   const [staffList, setStaffList] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [selectedMonth] = useState(dayjs().format('YYYY-MM'));
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [processing, setProcessing] = useState(false);
 
   // Summary data
@@ -130,142 +135,21 @@ const AttendanceList = () => {
     setSummary(summary);
   };
 
-  const handleCheckIn = async (staffId) => {
-    if (!hasPermission(PERMISSION_PAGES.ATTENDANCE, 'create')) {
-      toast.error('You do not have permission to mark attendance');
-      return;
-    }
 
-    try {
-      setProcessing(true);
-      const now = new Date();
-      const checkInTime = now.toTimeString().split(' ')[0];
-      const isLate = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0);
-
-      // Check if attendance record already exists for today
-      const existingRecord = attendanceRecords.find(record => 
-        record.staffId === staffId && record.date === selectedDate
-      );
-
-      if (existingRecord) {
-        toast.error('Attendance already marked for today');
-        return;
-      }
-
-      await addDoc(collection(firestore, 'attendance_records'), {
-        staffId,
-        staffName: staffList.find(staff => staff.id === staffId)?.name,
-        date: selectedDate,
-        checkIn: checkInTime,
-        checkOut: null,
-        status: 'present',
-        isLate,
-        totalHours: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-      toast.success('Check-in recorded successfully');
-    } catch (error) {
-      console.error('Error recording check-in:', error);
-      toast.error('Failed to record check-in');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleCheckOut = async (staffId) => {
-    if (!hasPermission(PERMISSION_PAGES.ATTENDANCE, 'edit')) {
-      toast.error('You do not have permission to update attendance');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      const now = new Date();
-      const checkOutTime = now.toTimeString().split(' ')[0];
-
-      const existingRecord = attendanceRecords.find(record => 
-        record.staffId === staffId && record.date === selectedDate
-      );
-
-      if (!existingRecord) {
-        toast.error('No check-in record found for today');
-        return;
-      }
-
-      if (existingRecord.checkOut) {
-        toast.error('Check-out already recorded for today');
-        return;
-      }
-
-      // Calculate total hours
-      const checkInTime = new Date(`2000-01-01T${existingRecord.checkIn}`);
-      const checkOutTimeObj = new Date(`2000-01-01T${checkOutTime}`);
-      const totalHours = (checkOutTimeObj - checkInTime) / (1000 * 60 * 60);
-
-      // Determine if it's a half day (less than 6 hours)
-      const status = totalHours < 6 ? 'half_day' : 'present';
-
-      await updateDoc(doc(firestore, 'attendance_records', existingRecord.id), {
-        checkOut: checkOutTime,
-        totalHours: Math.round(totalHours * 100) / 100,
-        status,
-        updatedAt: serverTimestamp()
-      });
-
-      toast.success('Check-out recorded successfully');
-    } catch (error) {
-      console.error('Error recording check-out:', error);
-      toast.error('Failed to record check-out');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const markLeave = async (staffId) => {
-    if (!hasPermission(PERMISSION_PAGES.ATTENDANCE, 'create')) {
-      toast.error('You do not have permission to mark attendance');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      
-      const existingRecord = attendanceRecords.find(record => 
-        record.staffId === staffId && record.date === selectedDate
-      );
-
-      if (existingRecord) {
-        toast.error('Attendance already marked for today');
-        return;
-      }
-
-      await addDoc(collection(firestore, 'attendance_records'), {
-        staffId,
-        staffName: staffList.find(staff => staff.id === staffId)?.name,
-        date: selectedDate,
-        checkIn: null,
-        checkOut: null,
-        status: 'leave',
-        isLate: false,
-        totalHours: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-      toast.success('Leave marked successfully');
-    } catch (error) {
-      console.error('Error marking leave:', error);
-      toast.error('Failed to mark leave');
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   const openAttendanceModal = (staff) => {
     setSelectedStaff(staff);
     setShowAttendanceModal(true);
+  };
+
+  const openEditModal = (staff, record = null) => {
+    setSelectedStaff(staff);
+    setSelectedRecord(record);
+    setShowEditModal(true);
+  };
+
+  const handleAttendanceUpdate = () => {
+    fetchStaffAndAttendance();
   };
 
   const getAttendanceStatus = (staffId) => {
@@ -314,8 +198,88 @@ const AttendanceList = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Attendance Dashboard</h1>
-          <p className="text-gray-600">Today: {dayjs(selectedDate).format('dddd, MMM DD, YYYY')}</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Attendance Dashboard</h1>
+              <p className="text-gray-600">
+                {dayjs(selectedDate).isSame(dayjs(), 'day') 
+                  ? `Today: ${dayjs(selectedDate).format('dddd, MMM DD, YYYY')}`
+                  : `Date: ${dayjs(selectedDate).format('dddd, MMM DD, YYYY')}`
+                }
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">Select Date:</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              {!dayjs(selectedDate).isSame(dayjs(), 'day') && (
+                <button
+                  onClick={() => setSelectedDate(dayjs().format('YYYY-MM-DD'))}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Today
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => {
+                const absentStaff = staffList.filter(staff => 
+                  !attendanceRecords.find(record => record.staffId === staff.id)
+                );
+                if (absentStaff.length > 0) {
+                  openEditModal(absentStaff[0], null);
+                } else {
+                  toast.info('All staff attendance has been marked for today');
+                }
+              }}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium"
+            >
+              Mark Absent for Unmarked Staff
+            </button>
+            <button
+              onClick={() => {
+                const presentStaff = staffList.filter(staff => 
+                  attendanceRecords.find(record => 
+                    record.staffId === staff.id && record.status === 'present'
+                  )
+                );
+                if (presentStaff.length > 0) {
+                  toast.info(`${presentStaff.length} staff members are already marked as present`);
+                } else {
+                  toast.info('No staff marked as present yet');
+                }
+              }}
+              className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 font-medium"
+            >
+              View Present Staff
+            </button>
+            <button
+              onClick={() => {
+                const lateStaff = attendanceRecords.filter(record => record.isLate);
+                if (lateStaff.length > 0) {
+                  toast.info(`${lateStaff.length} staff members arrived late today`);
+                } else {
+                  toast.info('No late arrivals today');
+                }
+              }}
+              className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 font-medium"
+            >
+              Check Late Arrivals
+            </button>
+          </div>
         </div>
 
         {/* Summary Cards */}
@@ -424,6 +388,9 @@ const AttendanceList = () => {
                     Leave Balance
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Notes
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -453,9 +420,16 @@ const AttendanceList = () => {
                         {staff.role?.replace('_', ' ').toUpperCase()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${attendanceStatus.color}-100 text-${attendanceStatus.color}-800`}>
-                          {attendanceStatus.text}
-                        </span>
+                        <div className="flex items-center">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${attendanceStatus.color}-100 text-${attendanceStatus.color}-800`}>
+                            {attendanceStatus.text}
+                          </span>
+                          {todayRecord?.isLate && (
+                            <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                              LATE
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {todayRecord?.checkIn || 'N/A'}
@@ -471,35 +445,27 @@ const AttendanceList = () => {
                           {leaveBalance.remaining} left {leaveBalance.used}/{leaveBalance.total} used
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {todayRecord?.notes ? (
+                          <span className="text-gray-600" title={todayRecord.notes}>
+                            {todayRecord.notes.length > 30 
+                              ? `${todayRecord.notes.substring(0, 30)}...` 
+                              : todayRecord.notes
+                            }
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
-                          {!todayRecord && (
-                            <>
-                              <button
-                                onClick={() => handleCheckIn(staff.id)}
-                                disabled={processing}
-                                className="text-green-600 hover:text-green-900 disabled:opacity-50"
-                              >
-                                Check In
-                              </button>
-                              <button
-                                onClick={() => markLeave(staff.id)}
-                                disabled={processing}
-                                className="text-yellow-600 hover:text-yellow-900 disabled:opacity-50"
-                              >
-                                Mark Leave
-                              </button>
-                            </>
-                          )}
-                          {todayRecord && !todayRecord.checkOut && todayRecord.status === 'present' && (
-                            <button
-                              onClick={() => handleCheckOut(staff.id)}
-                              disabled={processing}
-                              className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
-                            >
-                              Check Out
-                            </button>
-                          )}
+                          <button
+                            onClick={() => openEditModal(staff, todayRecord)}
+                            className="flex items-center text-blue-600 hover:text-blue-900"
+                          >
+                            {todayRecord ? <FiEdit3 className="h-4 w-4 mr-1" /> : <FiPlus className="h-4 w-4 mr-1" />}
+                            {todayRecord ? 'Edit' : 'Mark'}
+                          </button>
                           <button
                             onClick={() => openAttendanceModal(staff)}
                             className="text-indigo-600 hover:text-indigo-900"
@@ -570,6 +536,17 @@ const AttendanceList = () => {
           staff={selectedStaff}
           selectedMonth={selectedMonth}
           onClose={() => setShowAttendanceModal(false)}
+        />
+      )}
+
+      {/* Attendance Edit Modal */}
+      {showEditModal && selectedStaff && (
+        <AttendanceEditModal
+          staff={selectedStaff}
+          selectedDate={selectedDate}
+          existingRecord={selectedRecord}
+          onClose={() => setShowEditModal(false)}
+          onUpdate={handleAttendanceUpdate}
         />
       )}
     </div>
