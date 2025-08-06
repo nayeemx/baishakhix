@@ -23,7 +23,8 @@ const AttendanceEditModal = ({
     status: 'present',
     checkIn: '',
     checkOut: '',
-    notes: ''
+    notes: '',
+    leaveType: 'full_day'
   });
   const [loading, setLoading] = useState(false);
   const [isNewRecord, setIsNewRecord] = useState(false);
@@ -34,7 +35,8 @@ const AttendanceEditModal = ({
         status: existingRecord.status || 'present',
         checkIn: existingRecord.checkIn || '',
         checkOut: existingRecord.checkOut || '',
-        notes: existingRecord.notes || ''
+        notes: existingRecord.notes || '',
+        leaveType: existingRecord.leaveType || 'full_day'
       });
       setIsNewRecord(false);
     } else {
@@ -42,7 +44,8 @@ const AttendanceEditModal = ({
         status: 'present',
         checkIn: '',
         checkOut: '',
-        notes: ''
+        notes: '',
+        leaveType: 'full_day'
       });
       setIsNewRecord(true);
     }
@@ -97,6 +100,16 @@ const AttendanceEditModal = ({
       return;
     }
 
+    if (formData.status === 'half_day' && !formData.checkIn && !formData.checkOut) {
+      toast.error('Half day status requires either check-in or check-out time');
+      return;
+    }
+
+    if (formData.status === 'leave' && formData.leaveType === 'half_day' && !formData.checkIn && !formData.checkOut) {
+      toast.error('Half day leave requires either check-in or check-out time');
+      return;
+    }
+
     if (formData.checkIn && formData.checkOut) {
       const checkInTime = new Date(`2000-01-01T${formData.checkIn}`);
       const checkOutTime = new Date(`2000-01-01T${formData.checkOut}`);
@@ -115,11 +128,16 @@ const AttendanceEditModal = ({
         staffName: staff.name,
         date: selectedDate,
         status: determineStatus(),
-        checkIn: formData.checkIn || null,
-        checkOut: formData.checkOut || null,
+        checkIn: (formData.status === 'absent' || 
+                 (formData.status === 'leave' && formData.leaveType === 'full_day')) 
+                 ? null : (formData.checkIn || null),
+        checkOut: (formData.status === 'absent' || 
+                  (formData.status === 'leave' && formData.leaveType === 'full_day')) 
+                  ? null : (formData.checkOut || null),
         totalHours: calculateTotalHours(),
         isLate: isLate(),
         notes: formData.notes,
+        leaveType: formData.status === 'leave' ? formData.leaveType : null,
         updatedAt: serverTimestamp()
       };
 
@@ -198,7 +216,7 @@ const AttendanceEditModal = ({
         </div>
 
         {/* Form */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 space-y-4 h-[70vh] overflow-y-auto">
           {/* Status Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -227,54 +245,121 @@ const AttendanceEditModal = ({
             </div>
           </div>
 
-          {/* Time Inputs */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Check In Time
-              </label>
-              <div className="relative">
-                <FiClock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="time"
-                  value={formData.checkIn}
-                  onChange={(e) => handleInputChange('checkIn', e.target.value)}
-                  className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="09:00"
-                />
+          {/* Time Inputs - Only show for present, half_day, or half day leave */}
+          {(formData.status === 'present' || formData.status === 'half_day' || 
+            (formData.status === 'leave' && formData.leaveType === 'half_day')) && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Check In Time
+                  {formData.status === 'leave' && formData.leaveType === 'half_day' && (
+                    <span className="text-xs text-gray-500 ml-1">(Required for half day leave)</span>
+                  )}
+                </label>
+                <div className="relative">
+                  <FiClock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    type="time"
+                    value={formData.checkIn}
+                    onChange={(e) => handleInputChange('checkIn', e.target.value)}
+                    className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="09:00"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Check Out Time
-              </label>
-              <div className="relative">
-                <FiClock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="time"
-                  value={formData.checkOut}
-                  onChange={(e) => handleInputChange('checkOut', e.target.value)}
-                  className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="17:00"
-                />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Check Out Time
+                  {formData.status === 'leave' && formData.leaveType === 'half_day' && (
+                    <span className="text-xs text-gray-500 ml-1">(Required for half day leave)</span>
+                  )}
+                </label>
+                <div className="relative">
+                  <FiClock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    type="time"
+                    value={formData.checkOut}
+                    onChange={(e) => handleInputChange('checkOut', e.target.value)}
+                    className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="17:00"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
+          
+          {/* Absent/Leave Message */}
+          {(formData.status === 'absent' || 
+            (formData.status === 'leave' && formData.leaveType === 'full_day')) && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                {formData.status === 'absent' 
+                  ? 'No check-in/check-out time required for absent status.'
+                  : 'No check-in/check-out time required for full day leave.'
+                }
+              </p>
+            </div>
+          )}
+
+          {/* Leave Type Selection */}
+          {formData.status === 'leave' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Leave Type
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'full_day', label: 'Full Day Leave', description: 'No check-in/check-out required' },
+                  { value: 'half_day', label: 'Half Day Leave', description: 'Requires check-in or check-out time' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleInputChange('leaveType', option.value)}
+                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors text-left ${
+                      formData.leaveType === option.value
+                        ? 'bg-blue-100 text-blue-800 border-blue-300'
+                        : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="font-medium">{option.label}</div>
+                    <div className="text-xs text-gray-500">{option.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Calculated Fields */}
-          {(formData.checkIn || formData.checkOut) && (
+          {(formData.checkIn || formData.checkOut || formData.status === 'leave' || formData.status === 'absent') && (
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Total Hours:</span>
-                <span className="font-medium">{calculateTotalHours()} hours</span>
-              </div>
-              {formData.checkIn && (
+              {formData.status !== 'leave' && formData.status !== 'absent' && (formData.checkIn || formData.checkOut) && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Hours:</span>
+                  <span className="font-medium">{calculateTotalHours()} hours</span>
+                </div>
+              )}
+              {formData.checkIn && formData.status !== 'leave' && formData.status !== 'absent' && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Late Arrival:</span>
                   <span className={`font-medium ${isLate() ? 'text-red-600' : 'text-green-600'}`}>
                     {isLate() ? 'Yes' : 'No'}
                   </span>
+                </div>
+              )}
+              {formData.status === 'leave' && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Leave Type:</span>
+                  <span className="font-medium text-blue-600">
+                    {formData.leaveType === 'full_day' ? 'Full Day Leave' : 'Half Day Leave'}
+                  </span>
+                </div>
+              )}
+              {formData.status === 'absent' && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Status:</span>
+                  <span className="font-medium text-red-600">Absent - No time tracking</span>
                 </div>
               )}
               <div className="flex justify-between text-sm">

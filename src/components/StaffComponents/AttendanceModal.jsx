@@ -17,8 +17,14 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
   const [currentMonth, setCurrentMonth] = useState(selectedMonth);
 
   useEffect(() => {
+    console.log('AttendanceModal: staff.id changed to:', staff.id);
+    console.log('AttendanceModal: currentMonth changed to:', currentMonth);
     fetchAttendanceRecords();
   }, [staff.id, currentMonth]);
+
+  useEffect(() => {
+    console.log('AttendanceModal: attendanceRecords updated:', attendanceRecords);
+  }, [attendanceRecords]);
 
   const fetchAttendanceRecords = async () => {
     try {
@@ -26,17 +32,23 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
       const monthStart = dayjs(currentMonth).startOf('month').format('YYYY-MM-DD');
       const monthEnd = dayjs(currentMonth).endOf('month').format('YYYY-MM-DD');
 
+      // Fetch all attendance records for the month first
       const attendanceQuery = query(
         collection(firestore, 'attendance_records'),
-        where('staffId', '==', staff.id),
         where('date', '>=', monthStart),
-        where('date', '<=', monthEnd),
-        orderBy('date', 'asc')
+        where('date', '<=', monthEnd)
       );
 
       const attendanceSnapshot = await getDocs(attendanceQuery);
-      const records = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAttendanceRecords(records);
+      const allRecords = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+             // Filter records for this specific staff
+       const staffRecords = allRecords.filter(record => record.staffId === staff.id);
+       console.log('All records for month:', allRecords);
+       console.log('Staff records for', staff.name, ':', staffRecords);
+       setAttendanceRecords(staffRecords);
+      
+      
     } catch (error) {
       console.error('Error fetching attendance records:', error);
     } finally {
@@ -45,8 +57,14 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
   };
 
   const getAttendanceForDate = (date) => {
+    console.log(`Looking for attendance on ${date}`);
+    console.log('Available records:', attendanceRecords.map(r => ({ date: r.date, status: r.status })));
     const record = attendanceRecords.find(record => record.date === date);
-    if (!record) return null;
+    if (record) {
+      console.log(`Found record for ${date}:`, record);
+    } else {
+      console.log(`No record found for ${date}`);
+    }
     return record;
   };
 
@@ -98,30 +116,57 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
   };
 
   const calculateMonthlyStats = () => {
+    console.log('Calculating stats for records:', attendanceRecords);
+    
     const presentDays = attendanceRecords.filter(record => record.status === 'present').length;
     const absentDays = attendanceRecords.filter(record => record.status === 'absent').length;
     const leaveDays = attendanceRecords.filter(record => record.status === 'leave').length;
     const halfDays = attendanceRecords.filter(record => record.status === 'half_day').length;
-    const lateDays = attendanceRecords.filter(record => record.isLate).length;
+    const lateDays = attendanceRecords.filter(record => record.isLate === true).length;
+    
+    // Calculate leave balance with half-day consideration
+    const totalLeaves = 4; // Monthly allocation
+    let usedLeaves = 0;
+    const leaveRecords = attendanceRecords.filter(record => record.status === 'leave');
+    leaveRecords.forEach(record => {
+      if (record.leaveType === 'full_day') {
+        usedLeaves += 1; // Full day = 1 leave
+      } else if (record.leaveType === 'half_day') {
+        usedLeaves += 0.5; // Half day = 0.5 leave
+      } else {
+        // Fallback: if leaveType is not specified, assume full day
+        usedLeaves += 1;
+      }
+    });
+    const remainingLeaves = Math.max(0, totalLeaves - usedLeaves);
 
-    return {
+    const stats = {
       presentDays,
       absentDays,
       leaveDays,
       halfDays,
-      lateDays
+      lateDays,
+      totalLeaves,
+      usedLeaves,
+      remainingLeaves
     };
+    
+    console.log('Calculated stats:', stats);
+    return stats;
   };
 
   const getChartData = () => {
     const stats = calculateMonthlyStats();
-    return [
+    const chartData = [
       { name: 'Present', value: stats.presentDays, color: '#10B981' },
       { name: 'Absent', value: stats.absentDays, color: '#EF4444' },
       { name: 'Leave', value: stats.leaveDays, color: '#F59E0B' },
       { name: 'Half Day', value: stats.halfDays, color: '#F97316' },
       { name: 'Late', value: stats.lateDays, color: '#8B5CF6' }
     ].filter(item => item.value > 0);
+    
+    console.log('Chart data:', chartData);
+    return chartData;
   };
 
   const navigateMonth = (direction) => {
@@ -167,18 +212,22 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <button
             onClick={() => navigateMonth('prev')}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-gray-100 rounded-lg flex items-center"
           >
-            <FiCalendar className="h-5 w-5" />
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
           <h3 className="text-lg font-semibold text-gray-900">
             {dayjs(currentMonth).format('MMMM YYYY')}
           </h3>
           <button
             onClick={() => navigateMonth('next')}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-gray-100 rounded-lg flex items-center"
           >
-            <FiCalendar className="h-5 w-5" />
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
 
@@ -193,34 +242,59 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
               <div className="lg:col-span-2">
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Calendar View</h4>
+                  
+                  {/* Calendar Legend */}
+                  <div className="flex flex-wrap gap-4 mb-4 text-xs">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                      <span>Present</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                      <span>Absent</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                      <span>Leave</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-orange-500 rounded-full mr-2"></div>
+                      <span>Half Day</span>
+                    </div>
+                  </div>
+                  
                   <div className="grid grid-cols-7 gap-1">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                       <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
                         {day}
                       </div>
                     ))}
-                    {calendarDays.map((date, index) => {
-                      const attendance = getAttendanceForDate(date);
-                      const isCurrentMonth = dayjs(date).format('YYYY-MM') === currentMonth;
-                      const isToday = date === dayjs().format('YYYY-MM-DD');
-                      
-                      return (
-                        <div
-                          key={index}
-                          className={`min-h-[40px] flex items-center justify-center text-sm border border-gray-100 ${
-                            !isCurrentMonth ? 'text-gray-300' : 'text-gray-900'
-                          } ${isToday ? 'bg-blue-50 border-blue-200' : ''}`}
-                        >
-                          <div className="text-center">
-                            <div className="font-medium">{dayjs(date).format('D')}</div>
-                            {attendance && (
-                              <div className={`w-2 h-2 rounded-full mx-auto mt-1 ${getStatusColor(attendance.status)}`} 
-                                   title={getStatusText(attendance.status)}></div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                                         {calendarDays.map((date, index) => {
+                       const attendance = getAttendanceForDate(date);
+                       const isCurrentMonth = dayjs(date).format('YYYY-MM') === currentMonth;
+                       const isToday = date === dayjs().format('YYYY-MM-DD');
+                       
+                       
+                       
+                       return (
+                         <div
+                           key={index}
+                           className={`min-h-[40px] flex items-center justify-center text-sm border border-gray-100 ${
+                             !isCurrentMonth ? 'text-gray-300' : 'text-gray-900'
+                           } ${isToday ? 'bg-blue-50 border-blue-200' : ''}`}
+                         >
+                           <div className="text-center">
+                             <div className="font-medium">{dayjs(date).format('D')}</div>
+                             {attendance && (
+                               <div 
+                                 className={`w-3 h-3 rounded-full mx-auto mt-1 ${getStatusColor(attendance.status)}`} 
+                                 title={`${dayjs(date).format('MMM DD')}: ${getStatusText(attendance.status)}`}
+                               ></div>
+                             )}
+                           </div>
+                         </div>
+                       );
+                     })}
                   </div>
                 </div>
               </div>
@@ -230,6 +304,15 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                 {/* Monthly Summary */}
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Monthly Summary</h4>
+                  
+                  {/* Attendance Percentage */}
+                  <div className="text-center mb-4 p-3 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {Math.round((stats.presentDays / dayjs(currentMonth).daysInMonth()) * 100)}%
+                    </div>
+                    <div className="text-sm text-blue-600">Attendance Rate</div>
+                  </div>
+                  
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
@@ -245,12 +328,39 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                       </div>
                       <span className="text-lg font-bold text-gray-900">{stats.absentDays}</span>
                     </div>
+                                         <div className="flex items-center justify-between">
+                       <div className="flex items-center">
+                         <div className="w-3 h-3 bg-yellow-500 rounded-full mr-3"></div>
+                         <span className="text-sm text-gray-600">Leave Days</span>
+                       </div>
+                       <div className="text-right">
+                         <span className="text-lg font-bold text-gray-900">{stats.leaveDays}</span>
+                         <div className="text-xs text-gray-500">
+                           {stats.leaveDays}/{stats.totalLeaves} used
+                         </div>
+                       </div>
+                     </div>
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center">
+                         <div className="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                         <span className="text-sm text-gray-600">Leave Balance</span>
+                       </div>
+                       <span className={`text-lg font-bold ${
+                         stats.remainingLeaves === 0 
+                           ? 'text-red-600' 
+                           : stats.remainingLeaves <= 1 
+                             ? 'text-yellow-600' 
+                             : 'text-green-600'
+                       }`}>
+                         {stats.remainingLeaves.toFixed(1)} remaining
+                       </span>
+                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <div className="w-3 h-3 bg-yellow-500 rounded-full mr-3"></div>
-                        <span className="text-sm text-gray-600">Leave Days</span>
+                        <div className="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
+                        <span className="text-sm text-gray-600">Half Days</span>
                       </div>
-                      <span className="text-lg font-bold text-gray-900">{stats.leaveDays}</span>
+                      <span className="text-lg font-bold text-gray-900">{stats.halfDays}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
@@ -298,6 +408,59 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                       </ResponsiveContainer>
                     </div>
                   </div>
+                </div>
+              </div>
+              
+              {/* Detailed Attendance Records */}
+              <div className="mt-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Detailed Attendance Records</h4>
+                  {attendanceRecords.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Check In</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Check Out</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {attendanceRecords.map((record) => (
+                            <tr key={record.id}>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                                {dayjs(record.date).format('MMM DD, YYYY')}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(record.status)} text-white`}>
+                                  {getStatusText(record.status)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                                {record.checkIn || 'N/A'}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                                {record.checkOut || 'N/A'}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                                {record.totalHours ? `${record.totalHours}h` : 'N/A'}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-gray-900">
+                                {record.notes || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No attendance records found for this month.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

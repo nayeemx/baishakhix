@@ -61,7 +61,7 @@ const UnderConstruction = () => {
   const darkMode = useSelector((state) => state.theme.darkMode);
 
   // Countdown logic - target date + countdown days
-  const targetDate = "5/25/2025";
+  const targetDate = "8/25/2025";
   const targetTime = "12:00 AM";
   const countdownDays = 45;
 

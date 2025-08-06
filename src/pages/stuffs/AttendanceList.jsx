@@ -38,7 +38,7 @@ const AttendanceList = () => {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
-  const [selectedMonth] = useState(dayjs().format('YYYY-MM'));
+  const [selectedMonth, setSelectedMonth] = useState(dayjs().format('YYYY-MM'));
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(null);
@@ -55,17 +55,32 @@ const AttendanceList = () => {
     late: 0
   });
 
+  // Update selectedMonth when selectedDate changes
+  useEffect(() => {
+    const newMonth = dayjs(selectedDate).format('YYYY-MM');
+    if (newMonth !== selectedMonth) {
+      console.log(`Month changed from ${selectedMonth} to ${newMonth} due to date change to ${selectedDate}`);
+      setSelectedMonth(newMonth);
+    }
+  }, [selectedDate, selectedMonth]);
+
   // Fetch staff and attendance data
   useEffect(() => {
     fetchStaffAndAttendance();
-  }, [selectedDate, selectedMonth]);
+  }, [selectedMonth]); // Only depend on selectedMonth, not selectedDate
 
   // Real-time listeners
   useEffect(() => {
     const usersQuery = query(collection(firestore, 'users'));
+    const monthStart = dayjs(selectedMonth).startOf('month').format('YYYY-MM-DD');
+    const monthEnd = dayjs(selectedMonth).endOf('month').format('YYYY-MM-DD');
+    
+    console.log(`Setting up real-time listeners for month: ${selectedMonth} (${monthStart} to ${monthEnd})`);
+    
     const attendanceQuery = query(
       collection(firestore, 'attendance_records'),
-      where('date', '==', selectedDate)
+      where('date', '>=', monthStart),
+      where('date', '<=', monthEnd)
     );
 
     const unsubscribeUsers = onSnapshot(usersQuery, () => {
@@ -80,7 +95,7 @@ const AttendanceList = () => {
       unsubscribeUsers();
       unsubscribeAttendance();
     };
-  }, [selectedDate]);
+  }, [selectedMonth]); // Only depend on selectedMonth to prevent conflicts
 
   const fetchStaffAndAttendance = async () => {
     try {
@@ -99,18 +114,39 @@ const AttendanceList = () => {
 
       setStaffList(staffData);
 
-      // Fetch today's attendance records
+      // Fetch attendance records for the entire month
+      const currentMonth = dayjs(selectedDate).format('YYYY-MM');
+      const monthStart = dayjs(currentMonth).startOf('month').format('YYYY-MM-DD');
+      const monthEnd = dayjs(currentMonth).endOf('month').format('YYYY-MM-DD');
+      
+      console.log(`Fetching attendance data for month: ${currentMonth} (${monthStart} to ${monthEnd})`);
+      
       const attendanceQuery = query(
         collection(firestore, 'attendance_records'),
-        where('date', '==', selectedDate)
+        where('date', '>=', monthStart),
+        where('date', '<=', monthEnd)
       );
       const attendanceSnapshot = await getDocs(attendanceQuery);
       const attendanceData = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+      console.log('Fetched attendance data:', {
+        monthStart,
+        monthEnd,
+        totalRecords: attendanceData.length,
+        records: attendanceData
+      });
+
       setAttendanceRecords(attendanceData);
 
-      // Calculate summary
-      calculateSummary(staffData, attendanceData);
+      // Calculate summary for today only
+      const todayAttendance = attendanceData.filter(record => record.date === selectedDate);
+      console.log('Today attendance for summary:', {
+        selectedDate,
+        totalRecords: attendanceData.length,
+        todayRecords: todayAttendance.length,
+        todayDetails: todayAttendance.map(r => ({ staffId: r.staffId, status: r.status, isLate: r.isLate }))
+      });
+      calculateSummary(staffData, todayAttendance);
 
     } catch (error) {
       console.error('Error fetching staff and attendance:', error);
@@ -121,16 +157,27 @@ const AttendanceList = () => {
   };
 
   const calculateSummary = (staff, attendance) => {
-    const todayAttendance = attendance.filter(record => record.date === selectedDate);
-    
+    // attendance is already filtered for selectedDate, so no need to filter again
     const summary = {
       totalStaff: staff.length,
-      presentToday: todayAttendance.filter(record => record.status === 'present').length,
-      onLeave: todayAttendance.filter(record => record.status === 'leave').length,
-      halfDay: todayAttendance.filter(record => record.status === 'half_day').length,
-      absent: staff.length - todayAttendance.length,
-      late: todayAttendance.filter(record => record.isLate).length
+      presentToday: attendance.filter(record => record.status === 'present').length,
+      onLeave: attendance.filter(record => record.status === 'leave').length,
+      halfDay: attendance.filter(record => record.status === 'half_day').length,
+      absent: staff.length - attendance.length,
+      late: attendance.filter(record => record.isLate).length
     };
+
+    console.log('Summary calculation:', {
+      selectedDate,
+      totalStaff: staff.length,
+      attendanceRecords: attendance.length,
+      presentToday: summary.presentToday,
+      onLeave: summary.onLeave,
+      halfDay: summary.halfDay,
+      absent: summary.absent,
+      late: summary.late,
+      attendanceDetails: attendance.map(r => ({ staffId: r.staffId, status: r.status, isLate: r.isLate }))
+    });
 
     setSummary(summary);
   };
@@ -153,7 +200,10 @@ const AttendanceList = () => {
   };
 
   const getAttendanceStatus = (staffId) => {
-    const record = attendanceRecords.find(record => record.staffId === staffId);
+    const record = attendanceRecords.find(record => 
+      record.staffId === staffId && 
+      record.date === selectedDate
+    );
     if (!record) return { status: 'absent', color: 'red', text: 'Absent' };
     
     switch (record.status) {
@@ -169,26 +219,101 @@ const AttendanceList = () => {
   };
 
   const getMonthlyAttendance = (staffId) => {
-    const monthStart = dayjs(selectedMonth).startOf('month').format('YYYY-MM-DD');
-    const monthEnd = dayjs(selectedMonth).endOf('month').format('YYYY-MM-DD');
+    const currentMonth = dayjs(selectedDate).format('YYYY-MM');
+    const monthStart = dayjs(currentMonth).startOf('month').format('YYYY-MM-DD');
+    const monthEnd = dayjs(currentMonth).endOf('month').format('YYYY-MM-DD');
     
+    // Filter records for the specific staff and month
     const monthRecords = attendanceRecords.filter(record => 
       record.staffId === staffId && 
       record.date >= monthStart && 
       record.date <= monthEnd
     );
 
+    console.log(`Monthly attendance for staff ${staffId}:`, {
+      monthStart,
+      monthEnd,
+      totalRecords: attendanceRecords.length,
+      staffRecords: monthRecords.length,
+      records: monthRecords
+    });
+
     const presentDays = monthRecords.filter(record => record.status === 'present').length;
-    const totalDays = dayjs(selectedMonth).daysInMonth();
+    const leaveDays = monthRecords.filter(record => record.status === 'leave').length;
+    const halfDays = monthRecords.filter(record => record.status === 'half_day').length;
+    const absentDays = monthRecords.filter(record => record.status === 'absent').length;
+    const totalDays = dayjs(currentMonth).daysInMonth();
+    
+    // Calculate percentage based on present days only
     const percentage = Math.round((presentDays / totalDays) * 100);
 
-    return { presentDays, totalDays, percentage };
+    const result = { 
+      presentDays, 
+      leaveDays, 
+      halfDays, 
+      absentDays,
+      totalDays, 
+      percentage 
+    };
+    
+    console.log(`Result for staff ${staffId}:`, result);
+    return result;
   };
 
-  const getLeaveBalance = () => {
-    // This would typically come from a leave management system
-    // For now, returning mock data
-    return { used: 4, total: 4, remaining: 0 };
+  const getLeaveBalance = (staffId) => {
+    // Calculate leave balance for the current month
+    const currentMonth = dayjs(selectedDate).format('YYYY-MM');
+    const monthStart = dayjs(currentMonth).startOf('month').format('YYYY-MM-DD');
+    const monthEnd = dayjs(currentMonth).endOf('month').format('YYYY-MM-DD');
+    
+    // Get all leave records for this staff in the current month
+    const staffLeaveRecords = attendanceRecords.filter(record => 
+      record.staffId === staffId && 
+      record.status === 'leave' && 
+      record.date >= monthStart && 
+      record.date <= monthEnd
+    );
+    
+    // Calculate used leaves with half-day consideration
+    let usedLeaves = 0;
+    staffLeaveRecords.forEach(record => {
+      if (record.leaveType === 'full_day') {
+        usedLeaves += 1; // Full day = 1 leave
+      } else if (record.leaveType === 'half_day') {
+        usedLeaves += 0.5; // Half day = 0.5 leave
+      } else {
+        // Fallback: if leaveType is not specified, assume full day
+        usedLeaves += 1;
+      }
+    });
+    
+    const totalLeaves = 4; // Monthly allocation
+    const remainingLeaves = Math.max(0, totalLeaves - usedLeaves);
+    
+    console.log(`Leave balance for staff ${staffId}:`, {
+      currentMonth,
+      monthStart,
+      monthEnd,
+      totalLeaves,
+      usedLeaves,
+      remainingLeaves,
+      leaveRecords: staffLeaveRecords.map(r => ({ 
+        date: r.date, 
+        leaveType: r.leaveType, 
+        status: r.status 
+      })),
+      allStaffRecords: attendanceRecords.filter(r => r.staffId === staffId).map(r => ({
+        date: r.date,
+        status: r.status,
+        leaveType: r.leaveType
+      }))
+    });
+    
+    return { 
+      used: usedLeaves, 
+      total: totalLeaves, 
+      remaining: remainingLeaves 
+    };
   };
 
   if (loading) return <AppLoader />;
@@ -200,7 +325,7 @@ const AttendanceList = () => {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Attendance Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Staff Attendance Dashboard</h1>
               <p className="text-gray-600">
                 {dayjs(selectedDate).isSame(dayjs(), 'day') 
                   ? `Today: ${dayjs(selectedDate).format('dddd, MMM DD, YYYY')}`
@@ -216,6 +341,7 @@ const AttendanceList = () => {
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  max={dayjs().format('YYYY-MM-DD')}
                 />
               </div>
               {!dayjs(selectedDate).isSame(dayjs(), 'day') && (
@@ -226,6 +352,55 @@ const AttendanceList = () => {
                   Today
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Date Navigation */}
+        <div className="bg-white rounded-lg shadow p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => setSelectedDate(dayjs(selectedDate).subtract(1, 'day').format('YYYY-MM-DD'))}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                ← Previous Day
+              </button>
+              <div className="text-lg font-semibold text-gray-900">
+                {dayjs(selectedDate).format('dddd, MMM DD, YYYY')}
+              </div>
+              <button
+                onClick={() => {
+                  const nextDate = dayjs(selectedDate).add(1, 'day');
+                  if (nextDate.isBefore(dayjs()) || nextDate.isSame(dayjs(), 'day')) {
+                    setSelectedDate(nextDate.format('YYYY-MM-DD'));
+                  }
+                }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Next Day →
+              </button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">Quick Navigation:</span>
+              <button
+                onClick={() => setSelectedDate(dayjs().subtract(1, 'day').format('YYYY-MM-DD'))}
+                className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+              >
+                Yesterday
+              </button>
+              <button
+                onClick={() => setSelectedDate(dayjs().subtract(7, 'day').format('YYYY-MM-DD'))}
+                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              >
+                Last Week
+              </button>
+              <button
+                onClick={() => setSelectedDate(dayjs().startOf('month').format('YYYY-MM-DD'))}
+                className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
+              >
+                Month Start
+              </button>
             </div>
           </div>
         </div>
@@ -400,7 +575,9 @@ const AttendanceList = () => {
                   const attendanceStatus = getAttendanceStatus(staff.id);
                   const monthlyAttendance = getMonthlyAttendance(staff.id);
                   const leaveBalance = getLeaveBalance(staff.id);
-                  const todayRecord = attendanceRecords.find(record => record.staffId === staff.id);
+                  const todayRecord = attendanceRecords.find(record => 
+                    record.staffId === staff.id && record.date === selectedDate
+                  );
 
                   return (
                     <tr key={staff.id}>
@@ -421,30 +598,57 @@ const AttendanceList = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${attendanceStatus.color}-100 text-${attendanceStatus.color}-800`}>
-                            {attendanceStatus.text}
-                          </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${attendanceStatus.color}-100 text-${attendanceStatus.color}-800`}>
+                          {attendanceStatus.text}
+                        </span>
                           {todayRecord?.isLate && (
                             <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
                               LATE
                             </span>
                           )}
+                          {todayRecord?.status === 'leave' && todayRecord?.leaveType && (
+                            <span className="ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                              {todayRecord.leaveType === 'full_day' ? 'FULL DAY' : 'HALF DAY'}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {todayRecord?.checkIn || 'N/A'}
+                        {todayRecord?.checkIn || (todayRecord?.status === 'leave' ? 'N/A (Leave)' : 'N/A')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {todayRecord?.checkOut || 'N/A'}
+                        {todayRecord?.checkOut || (todayRecord?.status === 'leave' ? 'N/A (Leave)' : 'N/A')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {monthlyAttendance.percentage}% ({monthlyAttendance.presentDays}/{monthlyAttendance.totalDays} days)
+                        <div>
+                          <div className="font-medium">{monthlyAttendance.percentage}% ({monthlyAttendance.presentDays}/{monthlyAttendance.totalDays} days)</div>
+                          <div className="text-xs text-gray-500">
+                            Present: {monthlyAttendance.presentDays} | Leave: {monthlyAttendance.leaveDays} | Absent: {monthlyAttendance.absentDays}
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <span className={leaveBalance.remaining === 0 ? 'text-red-600' : 'text-green-600'}>
-                          {leaveBalance.remaining} left {leaveBalance.used}/{leaveBalance.total} used
-                        </span>
-                      </td>
+                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                         <div className="flex items-center space-x-2">
+                           <span className={`px-2 py-1 rounded text-xs font-medium ${
+                             leaveBalance.remaining === 0 
+                               ? 'bg-red-100 text-red-800' 
+                               : leaveBalance.remaining <= 1 
+                                 ? 'bg-yellow-100 text-yellow-800' 
+                                 : 'bg-green-100 text-green-800'
+                           }`}>
+                             {leaveBalance.used.toFixed(1)}/{leaveBalance.total}
+                           </span>
+                           <span className={`text-xs ${
+                             leaveBalance.remaining === 0 
+                               ? 'text-red-600' 
+                               : leaveBalance.remaining <= 1 
+                                 ? 'text-yellow-600' 
+                                 : 'text-green-600'
+                           }`}>
+                             {leaveBalance.remaining.toFixed(1)} remaining
+                           </span>
+                         </div>
+                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {todayRecord?.notes ? (
                           <span className="text-gray-600" title={todayRecord.notes}>
@@ -459,13 +663,13 @@ const AttendanceList = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
-                          <button
+                              <button
                             onClick={() => openEditModal(staff, todayRecord)}
                             className="flex items-center text-blue-600 hover:text-blue-900"
                           >
                             {todayRecord ? <FiEdit3 className="h-4 w-4 mr-1" /> : <FiPlus className="h-4 w-4 mr-1" />}
                             {todayRecord ? 'Edit' : 'Mark'}
-                          </button>
+                            </button>
                           <button
                             onClick={() => openAttendanceModal(staff)}
                             className="text-indigo-600 hover:text-indigo-900"
@@ -486,6 +690,7 @@ const AttendanceList = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {staffList.map((staff) => {
             const monthlyAttendance = getMonthlyAttendance(staff.id);
+            const leaveBalance = getLeaveBalance(staff.id);
             
             return (
               <div key={staff.id} className="bg-white rounded-lg shadow p-6">
@@ -511,22 +716,53 @@ const AttendanceList = () => {
                     <div className="text-lg font-bold text-green-800">{monthlyAttendance.presentDays}</div>
                     <div className="text-xs text-green-600">Present</div>
                   </div>
-                  <div className="bg-yellow-100 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-yellow-800">4</div>
-                    <div className="text-xs text-yellow-600">Leaves</div>
-                  </div>
+                                     <div className="bg-yellow-100 rounded-lg p-3 text-center">
+                     <div className="text-lg font-bold text-yellow-800">{monthlyAttendance.leaveDays}</div>
+                     <div className="text-xs text-yellow-600">Leaves</div>
+                     <div className="text-xs text-yellow-700 mt-1">
+                       {leaveBalance.used.toFixed(1)}/4 used
+                     </div>
+                   </div>
                   <div className="bg-red-100 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-red-800">3</div>
+                    <div className="text-lg font-bold text-red-800">{monthlyAttendance.absentDays}</div>
                     <div className="text-xs text-red-600">Absent</div>
                   </div>
-                  <div className="bg-blue-100 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-blue-800">0</div>
-                    <div className="text-xs text-blue-600">Left</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                                     <div className="bg-orange-100 rounded-lg p-3 text-center">
+                     <div className="text-lg font-bold text-orange-800">{monthlyAttendance.halfDays}</div>
+                     <div className="text-xs text-orange-600">Half Day</div>
+                   </div>
+                 </div>
+                 
+                 {/* Leave Balance Indicator */}
+                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                   <div className="flex items-center justify-between">
+                     <span className="text-sm font-medium text-blue-700">Leave Balance</span>
+                     <span className={`text-sm font-bold ${
+                       leaveBalance.remaining === 0 
+                         ? 'text-red-600' 
+                         : leaveBalance.remaining <= 1 
+                           ? 'text-yellow-600' 
+                           : 'text-green-600'
+                     }`}>
+                       {leaveBalance.remaining.toFixed(1)} remaining
+                     </span>
+                   </div>
+                   <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                     <div 
+                       className={`h-2 rounded-full ${
+                         leaveBalance.used >= 4 
+                           ? 'bg-red-500' 
+                           : leaveBalance.used >= 3 
+                             ? 'bg-yellow-500' 
+                             : 'bg-green-500'
+                       }`}
+                       style={{ width: `${(leaveBalance.used / 4) * 100}%` }}
+                     ></div>
+                   </div>
+                 </div>
+               </div>
+             );
+           })}
         </div>
       </div>
 
