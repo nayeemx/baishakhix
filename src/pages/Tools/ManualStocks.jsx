@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { FiUpload, FiCheckCircle, FiAlertCircle, FiEye } from 'react-icons/fi';
 import { firestore } from '../../firebase/firebase.config';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch, getDoc } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 import ShowmanualStock from '../../components/ToolsComponents/ShowmanualStock';
 
@@ -55,37 +55,83 @@ const ManualStocks = () => {
     let imported = 0;
     let failed = 0;
     const total = csvData.length;
+    
+    console.log('Starting import with', total, 'rows');
+    
+    // Test Firebase connection first
+    try {
+      console.log('Testing Firebase connection...');
+      const testDoc = doc(firestore, 'test_connection', 'test');
+      await getDoc(testDoc);
+      console.log('Firebase connection successful');
+    } catch (e) {
+      console.error('Firebase connection failed:', e);
+      setError('Firebase connection failed: ' + e.message);
+      setLoading(false);
+      return;
+    }
+    
     for (let i = 0; i < total; i += BATCH_SIZE) {
+      console.log(`Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(total/BATCH_SIZE)}`);
+      
       const batch = writeBatch(firestore);
       const chunk = csvData.slice(i, i + BATCH_SIZE);
+      let batchImported = 0;
+      
       for (const row of chunk) {
-        const { barcode } = row;
+        const barcode = row.barcode || row.PID; // Use PID if barcode is missing
         if (!barcode) {
           failed++;
+          console.log('Missing barcode/PID in row:', row);
           continue;
         }
         try {
           const convertedRow = convertRowTypes(row);
           batch.set(doc(firestore, 'manual_product', String(barcode)), convertedRow, { merge: false });
-          imported++;
+          batchImported++;
         } catch (e) {
           failed++;
-          toast.error(`Failed to import barcode ${barcode}: ${e.message}`);
+          console.error(`Failed to prepare row for barcode ${barcode}:`, e);
         }
       }
+      
+      console.log(`Batch prepared: ${batchImported} rows ready to commit`);
+      
       try {
-        await batch.commit();
+        if (batchImported > 0) {
+          console.log('Committing batch...');
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Batch commit timeout after 30 seconds')), 30000)
+          );
+          
+          await Promise.race([
+            batch.commit(),
+            timeoutPromise
+          ]);
+          
+          imported += batchImported;
+          console.log(`Batch committed successfully: ${batchImported} rows imported`);
+        }
       } catch (e) {
+        failed += batchImported; // Count all rows in this batch as failed
+        console.error('Batch commit failed:', e);
         setError('Batch commit failed: ' + e.message);
-        setLoading(false);
-        return;
+        // Don't return here, continue with next batch
       }
+      
       setProgress(Math.min(100, Math.round(((i + chunk.length) / total) * 100)));
     }
+    
     setLoading(false);
     setSuccess(`Imported: ${imported}, Failed: ${failed}`);
     setProgress(100);
-    if (imported > 0) toast.success(`Successfully imported ${imported} products to manual_product!`);
+    
+    if (imported > 0) {
+      toast.success(`Successfully imported ${imported} products to manual_product!`);
+    } else {
+      toast.error(`Import failed: ${failed} rows failed to import. Check console for details.`);
+    }
   };
 
   return (
