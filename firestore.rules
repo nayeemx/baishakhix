@@ -35,8 +35,8 @@ service cloud.firestore {
         (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != null &&
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'user' &&
-          // Only allow updating 'role' and/or 'permissions'
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'permissions']) &&
+          // Only allow updating 'role', 'permissions', and/or 'allowedMenus'
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'permissions', 'allowedMenus']) &&
           // If updating 'role', enforce hierarchy
           (
             !(request.resource.data.role is string) || (

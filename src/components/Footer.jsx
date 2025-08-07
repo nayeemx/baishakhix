@@ -59,7 +59,7 @@ const Footer = () => {
     },
     {
       Icon: FaCalendarAlt,
-      text: "Expected Launch: July 24, 2025",
+      text: "Expected Launch: Novermber 24, 2025",
       iconColor: "text-indigo-800",
     },
   ];

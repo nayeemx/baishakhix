@@ -25,26 +25,138 @@ const roles = [
   { value: 'user', label: 'User' }
 ];
 
+// Synced with SideNavbar.jsx menuKeyMap/menuItemsRaw
 const pages = [
+  // Dashboard
+  { key: "Dashboard", label: "Dashboard" },
+
+  // Report
+  { key: "SaleReport", label: "Sale Report" },
+
+  // Inventory
   { key: "ProductList", label: "Product List" },
   { key: "AddProduct", label: "Add Product" },
+  { key: "PrintBarcode", label: "Print Barcode" },
+  { key: "OldProduct", label: "Old Product" },
+  { key: "BarcodeHistory", label: "Barcode History" },
+  { key: "ManualStocks", label: "Manual Stock Import" },
+
+  // Expenses
+  { key: "ExpenseList", label: "Expense List" },
+
+  // People
   { key: "CustomerList", label: "Customer List" },
   { key: "SupplierList", label: "Supplier List" },
-  { key: "ViewSupplier", label: "View Supplier" },
-  { key: "ExpenseList", label: "Expense List" },
-  { key: "Profile", label: "Profile" },
-  { key: "DumpProduct", label: "Product Dumpster" },
-  { key: "FileManager", label: "File Manager" },
+
+  // Adjustment
+  { key: "SupplierReturn", label: "Supplier Return" },
+  { key: "CustomerReturn", label: "Customer Return" },
+  { key: "DumpProduct", label: "Dump Product" },
+
+  // Staff
+  { key: "Attendance", label: "Attendance" },
+  { key: "Leave", label: "Leave" },
+  { key: "Salary", label: "Salary" },
+
+  // Tools
+  { key: "ToDo", label: "To-Do List" },
+  { key: "KanBan", label: "KanBan Board" },
+  { key: "Upload", label: "Data Upload/Convert" },
+  { key: "Database", label: "Database Tools" },
   { key: "ManualStocks", label: "Manual Stock Import" },
+  { key: "FileManager", label: "File Manager" },
+  { key: "Faker", label: "Data Faker/Generator" },
+
+  // Approvals
+  { key: "LeaveApproval", label: "Leave Approval" },
+  { key: "ResetApproval", label: "Reset Approval" },
+
+  // Settings
+  { key: "Profile", label: "Profile" },
+  { key: "UserRole", label: "User Role" },
+  { key: "Logs", label: "Logs" },
+
+  // Other (add any additional keys as needed)
+  { key: "CustomerDue", label: "Customer Due" },
+  { key: "CustomerAdjustment", label: "Customer Adjustment" },
+  { key: "CustomerExchange", label: "Customer Exchange" },
+  { key: "ViewSupplier", label: "View Supplier" },
+  { key: "SupplierAdjustment", label: "Supplier Adjustment" },
+  { key: "SupplierTransaction", label: "Supplier Transaction" },
+  { key: "SalaryManagement", label: "Salary Management" },
+  { key: "AttendanceManagement", label: "Attendance Management" },
+  { key: "AdminSalaryDashboard", label: "Admin Salary Dashboard" },
+  { key: "SalarySettings", label: "Salary Settings" },
+  { key: "SalaryTransactionHistory", label: "Salary Transaction History" },
+  { key: "AttendanceEdit", label: "Attendance Edit" },
+  { key: "AttendanceModal", label: "Attendance Modal" },
+  { key: "Invoice", label: "Invoice" },
+  { key: "PaymentForm", label: "Payment Form" },
+  { key: "PosCart", label: "POS Cart" },
+  { key: "PosProduct", label: "POS Product" },
+  { key: "CameraScanner", label: "Camera Scanner" },
+  { key: "CodeScanner", label: "Code Scanner" },
+  { key: "QrCode", label: "QR Code" },
+  { key: "Show_Qrdata", label: "Show QR Data" },
+  { key: "UnitList", label: "Unit List" },
+  { key: "AddUnit", label: "Add Unit" },
+  { key: "EditUnit", label: "Edit Unit" },
+  { key: "OldunitList", label: "Old Unit List" },
+  { key: "AddoldUnit", label: "Add Old Unit" },
+  { key: "EditoldUnit", label: "Edit Old Unit" },
+  { key: "AddoldProductModal", label: "Add Old Product Modal" },
+  { key: "EditOldProductModal", label: "Edit Old Product Modal" },
+  { key: "ViewOldProductModal", label: "View Old Product Modal" },
+  { key: "AdjustmentDelete", label: "Adjustment Delete" },
+  { key: "GenericDeleteComponent", label: "Generic Delete Component" },
+  { key: "ProtectedRoute", label: "Protected Route" },
+  { key: "AppLoader", label: "App Loader" },
+  { key: "Loader", label: "Loader" },
+  { key: "Footer", label: "Footer" },
+  { key: "Header", label: "Header" },
+  { key: "SideNavbar", label: "Side Navbar" },
+  { key: "TiptapEditor", label: "Tiptap Editor" },
+  { key: "LintedEditorWrapper", label: "Linted Editor Wrapper" },
+  { key: "UnderConstruction", label: "Under Construction" },
+  { key: "NotFoundPage", label: "Not Found Page" },
+  { key: "AttendanceModal", label: "Attendance Modal" },
+  { key: "Profile", label: "Profile" },
+  { key: "FileManager", label: "File Manager" },
   { key: "Database", label: "Database Tools" },
   { key: "Upload", label: "Data Upload/Convert" },
   { key: "Faker", label: "Data Faker/Generator" },
   { key: "KanBan", label: "KanBan Board" },
   { key: "ToDo", label: "To-Do List" },
-  { key: "SupplierAdjustment", label: "Supplier Adjustment" },
-  { key: "OldProduct", label: "Old Product" },
-  { key: "Salary", label: "Salary Management" },
-  { key: "Attendance", label: "Attendance Management" },
+  { key: "POS", label: "POS" },
+  { key: "Invoice", label: "Invoice" },
+  { key: "PaymentForm", label: "Payment Form" },
+  { key: "PosCart", label: "POS Cart" },
+  { key: "PosProduct", label: "POS Product" },
+  { key: "CameraScanner", label: "Camera Scanner" },
+  { key: "CodeScanner", label: "Code Scanner" },
+  { key: "QrCode", label: "QR Code" },
+  { key: "Show_Qrdata", label: "Show QR Data" },
+  { key: "UnitList", label: "Unit List" },
+  { key: "AddUnit", label: "Add Unit" },
+  { key: "EditUnit", label: "Edit Unit" },
+  { key: "OldunitList", label: "Old Unit List" },
+  { key: "AddoldUnit", label: "Add Old Unit" },
+  { key: "EditoldUnit", label: "Edit Old Unit" },
+  { key: "AddoldProductModal", label: "Add Old Product Modal" },
+  { key: "EditOldProductModal", label: "Edit Old Product Modal" },
+  { key: "ViewOldProductModal", label: "View Old Product Modal" },
+  { key: "AdjustmentDelete", label: "Adjustment Delete" },
+  { key: "GenericDeleteComponent", label: "Generic Delete Component" },
+  { key: "ProtectedRoute", label: "Protected Route" },
+  { key: "AppLoader", label: "App Loader" },
+  { key: "Loader", label: "Loader" },
+  { key: "Footer", label: "Footer" },
+  { key: "Header", label: "Header" },
+  { key: "SideNavbar", label: "Side Navbar" },
+  { key: "TiptapEditor", label: "Tiptap Editor" },
+  { key: "LintedEditorWrapper", label: "Linted Editor Wrapper" },
+  { key: "UnderConstruction", label: "Under Construction" },
+  { key: "NotFoundPage", label: "Not Found Page" },
 ];
 const actions = ["create", "edit", "delete"];
 
@@ -57,6 +169,46 @@ const UserRole = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [permissionDraft, setPermissionDraft] = useState({});
   const [savingPermissions, setSavingPermissions] = useState(false);
+  // Menu Access Modal State
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [menuUser, setMenuUser] = useState(null);
+  const [menuDraft, setMenuDraft] = useState([]);
+  // Menu Modal Handlers
+  const openMenuModal = (user) => {
+    setMenuUser(user);
+    setMenuDraft(user.allowedMenus || []);
+    setShowMenuModal(true);
+  };
+  const closeMenuModal = () => {
+    setShowMenuModal(false);
+    setMenuUser(null);
+    setMenuDraft([]);
+  };
+  const handleMenuChange = (menuKey, checked) => {
+    setMenuDraft(prev =>
+      checked ? [...prev, menuKey] : prev.filter(key => key !== menuKey)
+    );
+  };
+  const saveMenus = async () => {
+    if (!menuUser) return;
+    setSavingPermissions(true);
+    try {
+      await updateDoc(doc(firestore, 'users', menuUser.id), {
+        allowedMenus: menuDraft,
+      });
+      toast.success("Menu access updated!");
+      setUsers(prev =>
+        prev.map(u =>
+          u.id === menuUser.id ? { ...u, allowedMenus: menuDraft } : u
+        )
+      );
+      closeMenuModal();
+    } catch (err) {
+      toast.error("Failed to update menu access: " + err.message);
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
 
   // Check if current user has permission to manage roles
   const canManageRoles = currentUser && roleHierarchy.indexOf(currentUser.role) >= 0 && currentUser.role !== 'user';
@@ -365,12 +517,20 @@ const UserRole = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {user.role !== "super_user" && roleHierarchy.indexOf(user.role || 'user') > currentUserRoleIndex && (
-                      <button
-                        className="bg-blue-500 text-white px-3 py-1 rounded"
-                        onClick={() => openPermissionModal(user)}
-                      >
-                        Manage
-                      </button>
+                      <>
+                        <button
+                          className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
+                          onClick={() => openPermissionModal(user)}
+                        >
+                          Manage
+                        </button>
+                        <button
+                          className="bg-green-500 text-white px-3 py-1 rounded"
+                          onClick={() => openMenuModal(user)}
+                        >
+                          Menu Access
+                        </button>
+                      </>
                     )}
                     {user.role === "super_user" && (
                       <span className="text-xs text-gray-400">All Access</span>
@@ -379,6 +539,46 @@ const UserRole = () => {
                       <span className="text-xs text-gray-400">No Permission</span>
                     )}
                   </td>
+      {/* --- Menu Access Modal --- */}
+      {showMenuModal && menuUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg h-[96vh] overflow-auto">
+            <h2 className="text-xl font-bold mb-4">
+              Menu Access for {menuUser.name}
+            </h2>
+            <div className="mb-6">
+              <div className="flex flex-wrap gap-3">
+                {pages.map(page => (
+                  <label key={page.key} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={menuDraft.includes(page.key)}
+                      onChange={e => handleMenuChange(page.key, e.target.checked)}
+                    />
+                    <span>{page.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 bg-gray-200 rounded"
+                onClick={closeMenuModal}
+                disabled={savingPermissions}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-green-600 text-white rounded"
+                onClick={saveMenus}
+                disabled={savingPermissions}
+              >
+                {savingPermissions ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
                 </tr>
               ))}
             </tbody>

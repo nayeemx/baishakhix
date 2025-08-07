@@ -15,7 +15,8 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
     setOpenMenu(openMenu === itemName ? null : itemName)
   }
 
-  const menuItems = [
+  // Menu access filtering
+  const menuItemsRaw = [
     { name: 'Dashboard', icon: FaIcons.FaHome, path: '/dashboard' },
     ...(user?.role !== 'user'
       ? [
@@ -101,7 +102,56 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
         { name: 'Logs', icon: FaIcons.FaClipboardList, path: '/settings/logs' },
       ],
     },
-  ]
+  ];
+
+  // Helper: map menu item/child to permission key
+  const menuKeyMap = {
+    'Product List': 'ProductList',
+    'Add Product': 'AddProduct',
+    'Print Barcode': 'PrintBarcode',
+    'Customers': 'CustomerList',
+    'Suppliers': 'SupplierList',
+    'Old Product': 'OldProduct',
+    'Dump Product': 'DumpProduct',
+    'Profile': 'Profile',
+    'Attendance': 'Attendance',
+    'Salary': 'Salary',
+    'Todo': 'ToDo',
+    'Kanban': 'KanBan',
+    'Upload': 'Upload',
+    'Database': 'Database',
+    'Manual_Stock': 'ManualStocks',
+    'File_Manager': 'FileManager',
+    'Faker': 'Faker',
+    'Supplier Adjustment': 'SupplierAdjustment',
+    'Expense List': 'ExpenseList',
+    // Add more as needed
+  };
+
+  // Filter function for menu access
+  function filterMenuItems(items) {
+    if (user?.role === 'super_user') return items;
+    const allowed = user?.allowedMenus || [];
+    // Top-level always show Dashboard, POS (if not user), Settings/User Role for admins
+    return items
+      .map(item => {
+        if (item.children) {
+          const filteredChildren = item.children.filter(child => allowed.includes(menuKeyMap[child.name] || child.name));
+          if (filteredChildren.length > 0) {
+            return { ...item, children: filteredChildren };
+          }
+          return null;
+        } else if (item.name === 'Dashboard' || item.name === 'POS') {
+          return item;
+        } else if (allowed.includes(menuKeyMap[item.name] || item.name)) {
+          return item;
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  const menuItems = filterMenuItems(menuItemsRaw);
 
   return (
     <>
