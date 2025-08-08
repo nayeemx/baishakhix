@@ -173,6 +173,64 @@ const UserRole = () => {
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [menuUser, setMenuUser] = useState(null);
   const [menuDraft, setMenuDraft] = useState([]);
+  // Button Control Modal State (for super_user)
+  const [showButtonControl, setShowButtonControl] = useState(false);
+  const [buttonAccessDraft, setButtonAccessDraft] = useState([]); // [{id, manage, menu}]
+  const [savingButtonAccess, setSavingButtonAccess] = useState(false);
+
+  // Open Button Control Modal
+  const openButtonControl = () => {
+    // Prepare draft: all users except super_user
+    setButtonAccessDraft(
+      users
+        .filter(u => u.role !== 'super_user')
+        .map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          manage: u.buttonAccess?.manage ?? true,
+          menu: u.buttonAccess?.menu ?? true
+        }))
+    );
+    setShowButtonControl(true);
+  };
+  const closeButtonControl = () => {
+    setShowButtonControl(false);
+    setButtonAccessDraft([]);
+  };
+  const handleButtonAccessChange = (userId, key, checked) => {
+    setButtonAccessDraft(prev =>
+      prev.map(u =>
+        u.id === userId ? { ...u, [key]: checked } : u
+      )
+    );
+  };
+  const saveButtonAccess = async () => {
+    setSavingButtonAccess(true);
+    try {
+      // Update each user in Firestore
+      await Promise.all(
+        buttonAccessDraft.map(u =>
+          updateDoc(doc(firestore, 'users', u.id), {
+            buttonAccess: { manage: u.manage, menu: u.menu }
+          })
+        )
+      );
+      // Update local state
+      setUsers(prev =>
+        prev.map(u => {
+          const found = buttonAccessDraft.find(bu => bu.id === u.id);
+          return found ? { ...u, buttonAccess: { manage: found.manage, menu: found.menu } } : u;
+        })
+      );
+      toast.success('Button access updated!');
+      closeButtonControl();
+    } catch (err) {
+      toast.error('Failed to update button access: ' + err.message);
+    } finally {
+      setSavingButtonAccess(false);
+    }
+  };
   // Menu Modal Handlers
   const openMenuModal = (user) => {
     setMenuUser(user);
@@ -516,28 +574,130 @@ const UserRole = () => {
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {user.role !== "super_user" && roleHierarchy.indexOf(user.role || 'user') > currentUserRoleIndex && (
+                    {/* Button logic: super_user can see for all except self; others only for themselves. Now controlled by buttonAccess. */}
+                    {user.role === "super_user" && user.id === currentUser?.uid && (
                       <>
+                        <span className="text-xs text-gray-400 mr-2">All Access</span>
                         <button
-                          className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
-                          onClick={() => openPermissionModal(user)}
+                          className="bg-purple-600 text-white px-3 py-1 rounded"
+                          onClick={openButtonControl}
                         >
-                          Manage
-                        </button>
-                        <button
-                          className="bg-green-500 text-white px-3 py-1 rounded"
-                          onClick={() => openMenuModal(user)}
-                        >
-                          Menu Access
+                          Button Control
                         </button>
                       </>
                     )}
-                    {user.role === "super_user" && (
-                      <span className="text-xs text-gray-400">All Access</span>
+                    {user.role !== "super_user" && (
+                      <>
+                        {/* super_user: can manage all except self */}
+                        {currentUser?.role === "super_user" && user.id !== currentUser?.uid && (
+                          <>
+                            {user.buttonAccess?.manage !== false && (
+                              <button
+                                className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
+                                onClick={() => openPermissionModal(user)}
+                              >
+                                Manage
+                              </button>
+                            )}
+                            {user.buttonAccess?.menu !== false && (
+                              <button
+                                className="bg-green-500 text-white px-3 py-1 rounded"
+                                onClick={() => openMenuModal(user)}
+                              >
+                                Menu Access
+                              </button>
+                            )}
+                            {user.buttonAccess?.manage === false && user.buttonAccess?.menu === false && (
+                              <span className="text-xs text-gray-400">No Permission</span>
+                            )}
+                          </>
+                        )}
+                        {/* non-super_user: can manage lower roles only (not self, not equal/higher) */}
+                        {currentUser?.role !== "super_user" && user.id !== currentUser?.uid && canManageUser(user) && (
+                          <>
+                            {user.buttonAccess?.manage !== false && (
+                              <button
+                                className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
+                                onClick={() => openPermissionModal(user)}
+                              >
+                                Manage
+                              </button>
+                            )}
+                            {user.buttonAccess?.menu !== false && (
+                              <button
+                                className="bg-green-500 text-white px-3 py-1 rounded"
+                                onClick={() => openMenuModal(user)}
+                              >
+                                Menu Access
+                              </button>
+                            )}
+                            {user.buttonAccess?.manage === false && user.buttonAccess?.menu === false && (
+                              <span className="text-xs text-gray-400">No Permission</span>
+                            )}
+                          </>
+                        )}
+                        {/* All other cases: No Permission */}
+                        {currentUser?.role !== "super_user" && (user.id === currentUser?.uid || !canManageUser(user)) && (
+                          <span className="text-xs text-gray-400">No Permission</span>
+                        )}
+                      </>
                     )}
-                    {user.role !== "super_user" && roleHierarchy.indexOf(user.role || 'user') <= currentUserRoleIndex && (
-                      <span className="text-xs text-gray-400">No Permission</span>
-                    )}
+      {/* --- Button Control Modal (Super User) --- */}
+      {showButtonControl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl h-[90vh] overflow-auto">
+            <h2 className="text-xl font-bold mb-4">Button Access Control</h2>
+            <table className="min-w-full mb-4">
+              <thead>
+                <tr>
+                  <th className="text-left p-2">User</th>
+                  <th className="text-left p-2">Email</th>
+                  <th className="text-center p-2">Manage</th>
+                  <th className="text-center p-2">Menu Access</th>
+                </tr>
+              </thead>
+              <tbody>
+                {buttonAccessDraft.map(u => (
+                  <tr key={u.id}>
+                    <td className="p-2">{u.name}</td>
+                    <td className="p-2">{u.email}</td>
+                    <td className="text-center p-2">
+                      <input
+                        type="checkbox"
+                        checked={u.manage}
+                        onChange={e => handleButtonAccessChange(u.id, 'manage', e.target.checked)}
+                      />
+                    </td>
+                    <td className="text-center p-2">
+                      <input
+                        type="checkbox"
+                        checked={u.menu}
+                        onChange={e => handleButtonAccessChange(u.id, 'menu', e.target.checked)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 bg-gray-200 rounded"
+                onClick={closeButtonControl}
+                disabled={savingButtonAccess}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-purple-600 text-white rounded"
+                onClick={saveButtonAccess}
+                disabled={savingButtonAccess}
+              >
+                {savingButtonAccess ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
                   </td>
       {/* --- Menu Access Modal --- */}
       {showMenuModal && menuUser && (
