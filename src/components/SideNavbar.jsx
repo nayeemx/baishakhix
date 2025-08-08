@@ -125,6 +125,15 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
     'Faker': 'Faker',
     'Supplier Adjustment': 'SupplierAdjustment',
     'Expense List': 'ExpenseList',
+    'User Role': 'UserRole',
+    'Logs': 'Logs',
+    'Leave Approval': 'LeaveApproval',
+    'Reset Approval': 'ResetApproval',
+    'Sale Report': 'SaleReport',
+    'Supplier Return': 'SupplierReturn',
+    'Customer Return': 'CustomerReturn',
+    'POS': 'POS',
+    'Dashboard': 'Dashboard',
     // Add more as needed
   };
 
