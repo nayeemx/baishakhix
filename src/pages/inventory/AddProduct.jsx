@@ -14,6 +14,21 @@ const dropdownFields = [
   "color", "design", "origin", "season", "size", "style", "stock_type"
 ];
 
+// Normalize possible field name variations from Firestore docs
+const FIELD_ALIASES = {
+  product_type: ["product_type", "productType", "type"],
+  origin: ["origin"],
+  design: ["design", "pattern"],
+  color: ["color", "colour"],
+  size: ["size"],
+  season: ["season"],
+  style: ["style"],
+  cosmatic_type: ["cosmatic_type", "cosmetic_type", "cosmetics_type"],
+  item_type: ["item_type", "itemType", "category", "category_type"],
+  stock_type: ["stock_type", "stockType"],
+  brand: ["brand"],
+};
+
 const murukhhoOptions = [
   { value: 'party', label: 'Party (due purchase)' },
   { value: 'cash purchase', label: 'Cash_Purchase' },
@@ -52,6 +67,7 @@ const AddProduct = () => {
     paid_amount: '',
     supplier_id: '',
     sku: '',
+    product: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -69,6 +85,26 @@ const AddProduct = () => {
   const navigate = useNavigate();
   const { canCreate } = usePermissions();
 
+  // Reset form fields when switching modes
+  const handleModeChange = (newMode) => {
+    setIsCosmeticMode(newMode);
+    // Reset product-related fields when switching modes
+    setForm(prev => ({
+      ...prev,
+      item_type: newMode ? 'Cosmetic' : 'General',
+      cosmatic_type: '',
+      product_category: '',
+      product_type: '',
+      brand: '',
+      color: '',
+      design: '',
+      origin: '',
+      season: '',
+      size: '',
+      style: '',
+    }));
+  };
+
   // Fetch suppliers
   useEffect(() => {
     const fetchSuppliers = async () => {
@@ -81,21 +117,53 @@ const AddProduct = () => {
   // Fetch units for dropdowns
   useEffect(() => {
     const fetchUnits = async () => {
-      const unitsSnap = await getDocs(collection(firestore, 'product_units'));
-      const options = {};
-      const validUnits = unitsSnap.docs
-        .map(doc => doc.data())
-        .filter(unit => unit.stock_type === 'new_product');
-      const filteredUnits = isCosmeticMode
-        ? validUnits.filter(unit => unit.item_type === 'Cosmatic')
-        : validUnits.filter(unit => unit.item_type !== 'Cosmatic');
-      dropdownFields.forEach(field => {
-        options[field] = [...new Set(filteredUnits.map(u => u[field]).filter(v => v && v.trim() !== ''))].sort();
-      });
-      setUnitOptions(options);
+      try {
+        const unitsSnap = await getDocs(collection(firestore, 'product_units'));
+        const options = {};
+        const allUnits = unitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        console.log('All units fetched:', allUnits); // Debug log
+        
+        // Show ALL units regardless of mode - no filtering
+        const unitsToUse = allUnits;
+        console.log('Using all units:', unitsToUse.length);
+        
+        // Populate dropdown options from all units
+        const coerceToArray = (value) => {
+          if (value == null) return [];
+          if (Array.isArray(value)) return value;
+          return [value];
+        };
+
+        dropdownFields.forEach(field => {
+          const aliases = FIELD_ALIASES[field] || [field];
+          const collected = [];
+          unitsToUse.forEach(unit => {
+            // pick first alias that exists
+            for (const alias of aliases) {
+              const raw = unit[alias];
+              if (raw !== undefined && raw !== null) {
+                const arr = coerceToArray(raw)
+                  .map(v => typeof v === 'number' ? String(v) : String(v))
+                  .map(v => v.trim())
+                  .filter(v => v.length > 0);
+                collected.push(...arr);
+                break; // move to next field for this unit
+              }
+            }
+          });
+          const uniqueSorted = Array.from(new Set(collected)).sort((a, b) => a.localeCompare(b));
+          options[field] = uniqueSorted;
+        });
+        
+        setUnitOptions(options);
+        console.log('Unit options loaded:', options); // Debug log
+      } catch (error) {
+        console.error('Error fetching product units:', error);
+        toast.error('Failed to load product unit options');
+      }
     };
     fetchUnits();
-  }, [isCosmeticMode]);
+  }, []);
 
   // Barcode and SKU generation
   useEffect(() => {
@@ -111,36 +179,53 @@ const AddProduct = () => {
   }, []);
 
   // Helper for visible fields and label renaming, with requested order
-  const getVisibleFields = () => [
-    { name: "product_type", label: "Product Type" },
-    { name: "origin", label: "Origin" },
-    { name: "design", label: "Design" },
-    { name: "color", label: "Color" },
-    { name: "size", label: "Size" },
-    { name: "season", label: "Season" },
-    { name: "style", label: "Style" }
-  ];
+  const getVisibleFields = () => {
+    const baseFields = [
+      { name: "product_type", label: "Product Type" },
+      { name: "brand", label: "Brand" },
+      { name: "origin", label: "Origin" },
+      { name: "design", label: "Design" },
+      { name: "color", label: "Color" },
+      { name: "size", label: "Size" },
+      { name: "season", label: "Season" },
+      { name: "style", label: "Style" },
+    ];
+    
+    if (isCosmeticMode) {
+      // Cosmetic mode: include brand, exclude color, design, style
+      return [
+        { name: "product_type", label: "Product Type" },
+        { name: "cosmatic_type", label: "Cosmetic Type" },
+        { name: "brand", label: "Brand" },
+        { name: "origin", label: "Origin" },
+        { name: "size", label: "Size" },
+        { name: "season", label: "Season" },
+      ];
+    }
+    
+    return baseFields;
+  };
 
-  // SKU generation logic (already present, but ensure correct format)
+  // SKU generation logic
   useEffect(() => {
-    const getFieldPart = (value = '', length = 1) => value ? value.split('-')[0].slice(0, length) : '';
+    const getFieldPart = (value = '', length = 1) => value ? value.split('-')[0].slice(0, length).toUpperCase() : '';
     let sku = '';
     if (form.product_type && form.origin && form.size) {
       if (isCosmeticMode) {
-        // PT-OC-SS-ST
+        // Cosmetic mode: CT-OP-SZ-B (e.g., 8Z-28A-5D2-01)
         sku = [
-          getFieldPart(form.product_type, 2),
-          getFieldPart(form.origin, 1) + getFieldPart(form.cosmatic_type, 2),
-          getFieldPart(form.season, 1) + getFieldPart(form.size, 2),
-          getFieldPart(form.style, 1)
+          getFieldPart(form.cosmatic_type, 2), // e.g., "8Z"
+          getFieldPart(form.origin, 1) + getFieldPart(form.product_type, 3), // e.g., "2" + "8A" → "28A"
+          getFieldPart(form.season, 1) + getFieldPart(form.size, 3), // e.g., "5" + "D2" → "5D2"
+          getFieldPart(form.brand, 2) // e.g., "01"
         ].filter(Boolean).join('-');
       } else {
-        // PT-OD-CS-SS
+        // General mode: PT-OD-CS-SS
         sku = [
           getFieldPart(form.product_type, 2),
           getFieldPart(form.origin, 1) + getFieldPart(form.design, 1),
           getFieldPart(form.color, 2) + getFieldPart(form.size, 2),
-          getFieldPart(form.season, 1) + getFieldPart(form.style, 1)
+          getFieldPart(form.season, 1) + getFieldPart(form.style, 2)
         ].filter(Boolean).join('-');
       }
     }
@@ -275,15 +360,15 @@ const AddProduct = () => {
           <span className={`text-sm ${!isCosmeticMode ? 'font-bold' : ''}`}>General</span>
           <Switch
             checked={isCosmeticMode}
-            onChange={setIsCosmeticMode}
-            className={
-              isCosmeticMode ? 'bg-blue-600' : 'bg-gray-200' + ' relative inline-flex h-6 w-11 items-center rounded-full transition-colors'
-            }
+            onChange={handleModeChange}
+            className={`${
+              isCosmeticMode ? 'bg-blue-600' : 'bg-gray-200'
+            } relative inline-flex h-6 w-11 items-center rounded-full transition-colors`}
           >
             <span
-              className={
-                isCosmeticMode ? 'translate-x-6' : 'translate-x-1' + ' inline-block h-4 w-4 transform rounded-full bg-white transition-transform'
-              }
+              className={`${
+                isCosmeticMode ? 'translate-x-6' : 'translate-x-1'
+              } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
             />
           </Switch>
           <span className={`text-sm ${isCosmeticMode ? 'font-bold' : ''}`}>Cosmetic</span>
@@ -398,7 +483,7 @@ const AddProduct = () => {
                 required
               />
             </div>
-            {/* Product Type, Origin, Design, Color, Size, Season, Style */}
+            {/* Product Type, Origin, Design, Color, Size, Season, Style, Brand */}
             {getVisibleFields().map(field => (
               <div key={field.name}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
@@ -443,12 +528,26 @@ const AddProduct = () => {
               <input type="text" value={form.percentage ? `${form.percentage}%` : ''} className="w-full border rounded p-2 bg-gray-50" readOnly />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Manufacture Date</label>
-              <input type="date" name="manufacture_date" value={form.manufacture_date} onChange={handleChange} className="w-full border rounded p-2" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Manufacture Date{isCosmeticMode && ' *'}</label>
+              <input
+                type="date"
+                name="manufacture_date"
+                value={form.manufacture_date}
+                onChange={handleChange}
+                className="w-full border rounded p-2"
+                required={isCosmeticMode}
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-              <input type="date" name="expiry_date" value={form.expiry_date} onChange={handleChange} className="w-full border rounded p-2" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date{isCosmeticMode && ' *'}</label>
+              <input
+                type="date"
+                name="expiry_date"
+                value={form.expiry_date}
+                onChange={handleChange}
+                className="w-full border rounded p-2"
+                required={isCosmeticMode}
+              />
             </div>
           </div>
         </div>

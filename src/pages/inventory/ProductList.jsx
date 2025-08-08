@@ -239,24 +239,31 @@ const ProductList = () => {
       data = data.filter(p => p.product_type === filters.type);
     }
     if (filters.brand) data = data.filter(p => p.brand === filters.brand)
-    if (filters.origin) data = data.filter(p => p.origin === filters.origin)
-    if (filters.bill_number) data = data.filter(p => p.bill_number === filters.bill_number)
-    if (filters.supplier_id) data = data.filter(p => p.supplier_id === filters.supplier_id)
-    if (filters.fromDate) {
-      const from = new Date(filters.fromDate)
-      data = data.filter(p => p.created_at && new Date(p.created_at) >= from)
-    }
-    if (filters.toDate) {
-      const to = new Date(filters.toDate)
-      data = data.filter(p => p.created_at && new Date(p.created_at) <= to)
-    }
-    // Apply search using inverted index
-    if (globalFilter) {
-      data = searchProducts(globalFilter, data);
-    }
-
-    return data
-  }, [filteredProducts, filters, globalFilter, searchProducts])
+      if (filters.origin) data = data.filter(p => p.origin === filters.origin)
+      if (filters.bill_number) data = data.filter(p => p.bill_number === filters.bill_number)
+      if (filters.supplier_id) data = data.filter(p => p.supplier_id === filters.supplier_id)
+      if (filters.fromDate) {
+        const from = new Date(filters.fromDate)
+        data = data.filter(p => p.created_at && new Date(p.created_at) >= from)
+      }
+      if (filters.toDate) {
+        const to = new Date(filters.toDate)
+        data = data.filter(p => p.created_at && new Date(p.created_at) <= to)
+      }
+      // Apply search using inverted index
+      if (globalFilter) {
+        data = searchProducts(globalFilter, data);
+      }
+      
+      // Join with suppliersList to get supplier names
+  return data.map(product => {
+    const supplier = suppliersList.find(s => s.id === product.supplier_id);
+    return {
+      ...product,
+      supplier_name: supplier ? supplier.supplier_name || supplier.id : 'Not Found',
+    };
+  });
+}, [filteredProducts, filters, globalFilter, searchProducts, suppliersList]);
 
   // Debug: log dropdown options and filteredProducts count
   useEffect(() => {
@@ -278,6 +285,11 @@ const ProductList = () => {
           return pageIndex * pageSize + row.index + 1
         },
         footer: () => 'SL',
+      },
+      {
+        header: 'Supplier Name',
+        accessorKey: 'supplier_name',
+        footer: props => props.column.id,
       },
       {
         header: 'Name',
@@ -344,7 +356,6 @@ const ProductList = () => {
         id: 'actions',
         cell: ({ row }) => (
           <div className="flex gap-2">
-            {/* View button - always available */}
             <button
               onClick={() => {
                 setEditData(row.original)
@@ -355,7 +366,6 @@ const ProductList = () => {
             >
               View
             </button>
-            {/* Edit button - check permissions */}
             {canEdit(PERMISSION_PAGES.PRODUCT_LIST) && (
               <button
                 onClick={() => {
@@ -368,7 +378,6 @@ const ProductList = () => {
                 Edit
               </button>
             )}
-            {/* Delete button - check permissions */}
             {canDelete(PERMISSION_PAGES.PRODUCT_LIST) && (
               <button
                 onClick={() => {
@@ -596,61 +605,61 @@ const ProductList = () => {
   if (isError) return <div>Error: {error.message}</div>
 
   return (
-    <div className="p-4">
-      <div className="mb-4 flex items-center justify-between print-hide">
-        <h1 className="text-xl font-semibold">
+    <div className="p-2 sm:p-4 w-[100vw]">
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between print-hide gap-2">
+        <h1 className="text-lg sm:text-xl font-semibold">
           Product List ({filteredProducts.length})
         </h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={handleUnitList}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+            className="p-2 sm:p-3 bg-slate-700 text-white rounded cursor-pointer hover:bg-slate-800"
             title="Manage Units"
           >
-            <MdInventory className='w-6 h-6' />
+            <MdInventory className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
           {canCreate(PERMISSION_PAGES.PRODUCT_LIST) && (
             <button
               onClick={handleAddProduct}
-              className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+              className="p-2 sm:p-3 bg-slate-700 text-white rounded cursor-pointer hover:bg-slate-800"
               title="Add New Product"
             >
-              <MdAddBox className='w-6 h-6' />
+              <MdAddBox className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           )}
           <button
             onClick={handleExport}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+            className="p-2 sm:p-3 bg-slate-700 text-white rounded cursor-pointer hover:bg-slate-800"
             title="Export to CSV"
           >
-            <FaFileCsv className='w-6 h-6' />
+            <FaFileCsv className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
           <button
             onClick={handlePrint}
-            className="px-4 py-2 bg-slate-700 text-white rounded cursor-pointer"
+            className="p-2 sm:p-3 bg-slate-700 text-white rounded cursor-pointer hover:bg-slate-800"
             title="Print List"
           >
-            <MdPrint className='w-6 h-6' />
+            <MdPrint className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
       </div>
-      {/* Print-only: Report generation time (moved above the table) */}
-      <div className="print-report-time">
+      {/* Print-only: Report generation time */}
+      <div className="print-report-time text-center text-sm sm:text-base font-medium mb-2 print:block hidden">
         {getBDReportTimeString()}
       </div>
       {/* Filter Controls */}
-      <div>
+      <div className="mb-4">
         <input
           type="text"
           placeholder="Search..."
           value={globalFilter}
           onChange={e => debouncedSetGlobalFilter(e.target.value)}
-          className="border p-2 rounded w-full mb-4 print:hidden"
+          className="border p-2 rounded w-full text-sm sm:text-base print:hidden"
         />
       </div>
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-2 print-hide">
+      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 print-hide">
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.category}
           onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}
         >
@@ -660,7 +669,7 @@ const ProductList = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.type}
           onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
         >
@@ -670,7 +679,7 @@ const ProductList = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.brand}
           onChange={e => setFilters(f => ({ ...f, brand: e.target.value }))}
         >
@@ -680,7 +689,7 @@ const ProductList = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.origin}
           onChange={e => setFilters(f => ({ ...f, origin: e.target.value }))}
         >
@@ -690,7 +699,7 @@ const ProductList = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={selectedSupplierId}
           onChange={e => setSelectedSupplierId(e.target.value)}
         >
@@ -700,12 +709,11 @@ const ProductList = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border predatory rounded text-sm sm:text-base"
           value={selectedBillNumber}
           onChange={e => setSelectedBillNumber(e.target.value)}
         >
           <option value="">All Bill Numbers</option>
-          {/* Only show bill numbers for selected supplier if selected, else show all */}
           {(selectedSupplierId
             ? getBillNumbersBySupplierId(selectedSupplierId, filteredProducts)
             : filterOptions.bill_number
@@ -715,31 +723,31 @@ const ProductList = () => {
         </select>
         <input
           type="date"
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.fromDate}
           onChange={e => setFilters(f => ({ ...f, fromDate: e.target.value }))}
           placeholder="From Date"
         />
         <input
           type="date"
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.toDate}
           onChange={e => setFilters(f => ({ ...f, toDate: e.target.value }))}
           placeholder="To Date"
         />
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full border text-xs print-table">
+        <table className="min-w-full border text-xs sm:text-sm print-table">
           <thead>
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map(header => {
-                  // Hide Actions column in print
-                  if (header.column.id === 'actions') {
+                  // Hide Actions and Created At columns in print
+                  if (header.column.id === 'actions' || header.column.id === 'created_at') {
                     return (
                       <th
                         key={header.id}
-                        className="border px-2 py-1 text-left print-hide"
+                        className="border px-1 py-1 sm:px-2 sm:py-1 text-left print-hide"
                       >
                         {header.isPlaceholder
                           ? null
@@ -750,39 +758,7 @@ const ProductList = () => {
                       </th>
                     )
                   }
-                  // Manual Count: only show in print
-                  if (header.column.id === 'manual_count') {
-                    return (
-                      <th
-                        key={header.id}
-                        className="border px-2 py-1 text-left print-only"
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column?.columnDef?.header ?? '',
-                              header.getContext()
-                            )}
-                      </th>
-                    )
-                  }
-                  // Original Quantity: only show in print
-                  if (header.column.id === 'original_qty') {
-                    return (
-                      <th
-                        key={header.id}
-                        className="border px-2 py-1 text-left print-only"
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column?.columnDef?.header ?? '',
-                              header.getContext()
-                            )}
-                      </th>
-                    )
-                  }
-                  // Hide Manual Count and Original Quantity in screen
+                  // Manual Count and Original Quantity: only show in print
                   if (
                     header.column.id === 'manual_count' ||
                     header.column.id === 'original_qty'
@@ -790,7 +766,7 @@ const ProductList = () => {
                     return (
                       <th
                         key={header.id}
-                        className="border px-2 py-1 text-left print-only"
+                        className="border px-1 py-1 sm:px-2 sm:py-1 text-left print-only"
                       >
                         {header.isPlaceholder
                           ? null
@@ -801,10 +777,11 @@ const ProductList = () => {
                       </th>
                     )
                   }
+                  // Apply text-nowrap to SKU header
                   return (
                     <th
                       key={header.id}
-                      className="border px-2 py-1 text-left"
+                      className={`border px-1 py-1 sm:px-2 sm:py-1 text-left ${header.column.id === 'sku' ? 'text-nowrap' : ''}`}
                     >
                       {header.isPlaceholder
                         ? null
@@ -822,71 +799,69 @@ const ProductList = () => {
             {table.getRowModel().rows.map(row => (
               <tr key={row.id}>
                 {row.getVisibleCells().map(cell => {
-                  // Hide Actions column in print
-                  if (cell.column.id === 'actions') {
+                  // Hide Actions and Created At columns in print
+                  if (cell.column.id === 'actions' || cell.column.id === 'created_at') {
                     return (
-                      <td key={cell.id} className="border px-2 py-1 print-hide">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setEditData(row.original)
-                              setOpenView(true)
-                            }}
-                            className="px-2 py-1 bg-slate-700 text-white rounded cursor-pointer"
-                            title="View Product Details"
-                          >
-                            <MdVisibility className='w-4 h-4' />
-                          </button>
-                          {canEdit(PERMISSION_PAGES.PRODUCT_LIST) && (
+                      <td key={cell.id} className="border px-1 py-1 sm:px-2 sm:py-1 print-hide">
+                        {cell.column.id === 'actions' ? (
+                          <div className="flex sm:flex-row gap-2">
                             <button
-                              onClick={() => handleEditProduct(row.original)}
-                              className="px-2 py-1 bg-slate-700 text-white rounded cursor-pointer"
-                              title="Edit Product"
+                              onClick={() => {
+                                setEditData(row.original)
+                                setOpenView(true)
+                              }}
+                              className="px-2 py-1 bg-blue-500 text-white rounded cursor-pointer flex items-center justify-center text-sm sm:text-base hover:bg-blue-600"
+                              title="View Product Details"
                             >
-                              <MdEdit className='w-4 h-4' />
+                              <MdVisibility className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">View</span>
                             </button>
-                          )}
-                          {canDelete(PERMISSION_PAGES.PRODUCT_LIST) && (
-                            <button
-                              onClick={() => handleDeleteProduct(row.original.id)}
-                              className="px-2 py-1 bg-red-500 text-white rounded cursor-pointer"
-                              title="Delete Product"
-                            >
-                              <MdDelete className='w-4 h-4' />
-                            </button>
-                          )}
-                        </div>
+                            {canEdit(PERMISSION_PAGES.PRODUCT_LIST) && (
+                              <button
+                                onClick={() => handleEditProduct(row.original)}
+                                className="px-2 py-1 bg-yellow-500 text-white rounded cursor-pointer flex items-center justify-center text-sm sm:text-base hover:bg-yellow-600"
+                                title="Edit Product"
+                              >
+                                <MdEdit className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Edit</span>
+                              </button>
+                            )}
+                            {canDelete(PERMISSION_PAGES.PRODUCT_LIST) && (
+                              <button
+                                onClick={() => handleDeleteProduct(row.original.id)}
+                                className="px-2 py-1 bg-red-500 text-white rounded cursor-pointer flex items-center justify-center text-sm sm:text-base hover:bg-red-600"
+                                title="Delete Product"
+                              >
+                                <MdDelete className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Delete</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          flexRender(cell.column?.columnDef?.cell ?? '', cell.getContext())
+                        )}
                       </td>
                     )
                   }
-                  // Manual Count: only show in print
-                  if (cell.column.id === 'manual_count') {
-                    return (
-                      <td key={cell.id} className="border px-2 py-1 print-only">
-                        {/* empty for manual count */}
-                      </td>
-                    )
-                  }
-                  // Original Quantity: only show in print
-                  if (cell.column.id === 'original_qty') {
-                    return (
-                      <td key={cell.id} className="border px-2 py-1 print-only">
-                        {flexRender(cell.column?.columnDef?.cell ?? '', cell.getContext())}
-                      </td>
-                    )
-                  }
-                  // Hide Manual Count and Original Quantity in screen
+                  // Manual Count and Original Quantity: only show in print
                   if (
-                    (cell.column.id === 'manual_count' || cell.column.id === 'original_qty')
+                    cell.column.id === 'manual_count' ||
+                    cell.column.id === 'original_qty'
                   ) {
                     return (
-                      <td key={cell.id} className="border px-2 py-1 print-only">
-                        {cell.column.id === 'manual_count' ? '' : flexRender(cell.column?.columnDef?.cell ?? '', cell.getContext())}
+                      <td key={cell.id} className="border px-1 py-1 sm:px-2 sm:py-1 print-only">
+                        {cell.column.id === 'manual_count'
+                          ? ''
+                          : flexRender(cell.column?.columnDef?.cell ?? '', cell.getContext())}
                       </td>
                     )
                   }
+                  // Apply text-nowrap to SKU column
                   return (
-                    <td key={cell.id} className="border px-2 py-1">
+                    <td
+                      key={cell.id}
+                      className={`border px-1 py-1 sm:px-2 sm:py-1 ${cell.column.id === 'sku' ? 'text-nowrap' : ''}`}
+                    >
                       {flexRender(cell.column?.columnDef?.cell ?? '', cell.getContext())}
                     </td>
                   )
@@ -895,51 +870,51 @@ const ProductList = () => {
             ))}
             {/* Totals row for numeric columns, aligned as requested */}
             <tr className="font-bold bg-gray-100">
-              {/* SL, Name, Barcode, SKU columns */}
-              <td className="border px-2 py-1" colSpan={4}>Total (Carryover up to this page):</td>
+              {/* SL, Supplier Name, Name, Barcode, SKU columns */}
+              <td className="border px-1 py-1 sm:px-2 sm:py-1" colSpan={5}>Total (Carryover up to this page):</td>
               {/* Quantity: carryover total */}
-              <td className="border px-2 py-1">{totals.quantity}</td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1">{totals.quantity}</td>
               {/* Manual Count: only show in print */}
-              <td className="border px-2 py-1 print-only"></td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1 print-only"></td>
               {/* Original Quantity: only show in print */}
-              <td className="border px-2 py-1 print-only">{totals.original_qty}</td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1 print-only">{totals.original_qty}</td>
               {/* Unit Price: carryover total */}
-              <td className="border px-2 py-1">{totals.unit_price}</td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1"></td>
               {/* Total Price: carryover total */}
-              <td className="border px-2 py-1">{totals.total_price}</td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1">{totals.total_price}</td>
               {/* Retail Price: carryover total */}
-              <td className="border px-2 py-1">{totals.retail_price}</td>
-              {/* Created At */}
-              <td className="border px-2 py-1"></td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1"></td>
+              {/* Created At: hide in print */}
+              <td className="border px-1 py-1 sm:px-2 sm:py-1 print-hide"></td>
               {/* Created by */}
-              <td className="border px-2 py-1"></td>
-              {/* Actions */}
-              <td className="border px-2 py-1 print-hide"></td>
+              <td className="border px-1 py-1 sm:px-2 sm:py-1"></td>
+              {/* Actions: hide in print */}
+              <td className="border px-1 py-1 sm:px-2 sm:py-1 print-hide"></td>
             </tr>
           </tbody>
         </table>
       </div>
       {/* Pagination Controls */}
-      <div className="mt-4 flex items-center justify-between flex-wrap gap-2 print-hide">
-        <div className="text-xs text-gray-500">
+      <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 print-hide">
+        <div className="text-xs sm:text-sm text-gray-500">
           Showing {table.getRowModel().rows.length} of {tableData.length} filtered products ({filteredProducts.length} total)
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setPageIndex(0)}
             disabled={pageIndex === 0}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-2 py-1 sm:px-3 sm:py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'<<'}
           </button>
           <button
             onClick={() => setPageIndex(old => Math.max(0, old - 1))}
             disabled={pageIndex === 0}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-2 py-1 sm:px-3 sm:py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'<'}
           </button>
-          <span>
+          <span className="text-xs sm:text-sm">
             Page{' '}
             <strong>
               {pageIndex + 1} of {table.getPageCount()}
@@ -952,28 +927,27 @@ const ProductList = () => {
               max={table.getPageCount()}
               value={pageInput}
               onChange={e => setPageInput(e.target.value)}
-              className="border rounded w-12 p-1 text-center"
+              className="border rounded w-12 p-1 text-center text-xs sm:text-sm"
               placeholder="Go"
-              style={{ width: 50 }}
             />
           </form>
           <button
             onClick={() => setPageIndex(old => Math.min(table.getPageCount() - 1, old + 1))}
             disabled={pageIndex >= table.getPageCount() - 1}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-2 py-1 sm:px-3 sm:py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'>'}
           </button>
           <button
             onClick={() => setPageIndex(table.getPageCount() - 1)}
             disabled={pageIndex >= table.getPageCount() - 1}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-2 py-1 sm:px-3 sm:py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'>>'}
           </button>
           {/* Page size selector */}
           <select
-            className="border rounded p-1 ml-2"
+            className="border rounded p-1 text-xs sm:text-sm"
             value={pageSize}
             onChange={e => {
               const newSize = Number(e.target.value)
@@ -988,7 +962,7 @@ const ProductList = () => {
               </option>
             ))}
           </select>
-          <span className="ml-2 text-xs text-gray-500">
+          <span className="text-xs sm:text-sm text-gray-500">
             {table.getRowModel().rows.length} record(s) in this page
           </span>
         </div>
@@ -1006,7 +980,6 @@ const ProductList = () => {
         setOpen={setOpenView}
         data={editData}
         suppliersList={suppliersList}
-        // Add this prop if your modal supports it, to center like AddProductModal
         className="fixed inset-0 flex items-center justify-center z-50"
       />
       <EditProductModal
@@ -1024,7 +997,7 @@ const ProductList = () => {
         className="fixed inset-0 flex items-center justify-center z-50"
       />
       <UnitList open={openUnitList} setOpen={setOpenUnitList} />
-      {/* Print-specific CSS */}
+      {/* Print-specific and responsive CSS */}
       <style>
         {`
           @media print {
@@ -1068,10 +1041,26 @@ const ProductList = () => {
               display: none !important;
             }
           }
+          @media (max-width: 640px) {
+            .text-nowrap {
+              white-space: nowrap;
+            }
+            table {
+              display: block;
+              overflow-x: auto;
+              white-space: nowrap;
+            }
+            th, td {
+              min-width: 80px;
+            }
+            .actions {
+              min-width: 120px;
+            }
+          }
         `}
       </style>
       {/* Print-only header */}
-      <div className="print:hidden">
+      <div className="print-header hidden print:block text-center text-lg font-bold mb-4">
         Product List ({filteredProducts.length})
       </div>
       <ToastContainer position="top-right" autoClose={2000} hideProgressBar />

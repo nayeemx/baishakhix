@@ -6,7 +6,6 @@ import { FiSearch, FiChevronLeft, FiChevronRight, FiX, FiHash, FiEdit } from 're
 import EditmanualStock from './EditmanualStock';
 import { useSelector } from 'react-redux';
 import { collection as fsCollection, getDocs as fsGetDocs, query as fsQuery, where as fsWhere, doc as fsDoc, setDoc as fsSetDoc, deleteDoc as fsDeleteDoc, serverTimestamp } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
 
 const PAGE_SIZE = 50;
 
@@ -27,6 +26,8 @@ const ShowmanualStock = ({ open, onClose }) => {
   const pageCursorsRef = useRef([]); // Use ref for page cursors
   const [allProducts, setAllProducts] = useState([]);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [modalImageUrl, setModalImageUrl] = useState(null);
   const [userFilter, setUserFilter] = useState('');
   const [userSlots, setUserSlots] = useState([]);
   const [assignedUserSlot, setAssignedUserSlot] = useState('');
@@ -139,6 +140,19 @@ const ShowmanualStock = ({ open, onClose }) => {
   const pageSize = 50;
   const paginatedProducts = filteredProducts.slice((page - 1) * pageSize, page * pageSize);
 
+  // Handler to open image modal
+  const handleImageClick = (imgUrl) => {
+    console.log('Image clicked:', imgUrl);
+    setModalImageUrl(imgUrl);
+    setImageModalOpen(true);
+  };
+
+  // Handler to close image modal
+  const handleCloseImageModal = () => {
+    setImageModalOpen(false);
+    setModalImageUrl(null);
+  };
+
   // Handler to open delete modal
   const handleDeleteClick = (row) => {
     setDeleteProduct(row);
@@ -170,20 +184,12 @@ const ShowmanualStock = ({ open, onClose }) => {
     }
   };
 
-  // Export to Excel handler
-  const handleExportExcel = async () => {
-    // Fetch all records from manual_product
-    const snap = await getDocs(query(collection(firestore, 'manual_product')));
-    const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    if (data.length === 0) return;
-    // Convert to worksheet
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Manual Product');
-    XLSX.writeFile(wb, 'manual_product_export.xlsx');
-  };
-
   if (!open) return null;
+
+  // Add debug log to modal rendering
+  if (imageModalOpen) {
+    console.log('Modal open with image:', modalImageUrl);
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -205,11 +211,6 @@ const ShowmanualStock = ({ open, onClose }) => {
         </div>
         {/* Search and Controls */}
         <div className="flex flex-wrap items-center gap-2 px-6 py-3 bg-white border-b">
-          <button
-            className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition mr-4"
-            onClick={handleExportExcel}
-            title="Export all manual product records to Excel"
-          >Export to Excel</button>
           <div className="flex items-center gap-2">
             <select
               className="border rounded px-2 py-1 focus:ring-2 focus:ring-blue-300"
@@ -294,6 +295,7 @@ const ShowmanualStock = ({ open, onClose }) => {
             <table className="min-w-full text-xs border">
               <thead className="sticky top-0 z-10 bg-blue-50 shadow-sm">
                 <tr className="bg-blue-100">
+                  <th className="p-2 font-semibold text-blue-700">Image</th>
                   <th className="p-2 font-semibold text-blue-700">Barcode</th>
                   <th className="p-2 font-semibold text-blue-700">SKU</th>
                   <th className="p-2 font-semibold text-blue-700">Qty</th>
@@ -306,11 +308,21 @@ const ShowmanualStock = ({ open, onClose }) => {
               <tbody>
                 {paginatedProducts.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-gray-400 py-8">No data found.</td>
+                    <td colSpan={8} className="text-center text-gray-400 py-8">No data found.</td>
                   </tr>
                 ) : (
                   paginatedProducts.map((row, i) => (
                     <tr key={row.id || i} className="border-b hover:bg-blue-50 transition">
+                      <td className="p-2">
+                        {row.url && (
+                          <img
+                            src={row.url}
+                            alt={row.name || 'Image'}
+                            className="h-10 w-10 object-cover rounded cursor-pointer border border-gray-200"
+                            onClick={() => handleImageClick(row.url)}
+                          />
+                        )}
+                      </td>
                       <td className="p-2 font-mono text-blue-900">{String(row.barcode)}</td>
                       <td className="p-2 font-mono text-blue-900">{row.sku}</td>
                       <td className="p-2 text-blue-900">{row.qty}</td>
@@ -366,6 +378,32 @@ const ShowmanualStock = ({ open, onClose }) => {
               <EditmanualStock product={editProduct} onClose={() => handleEditModalClose(true)} currentUser={{ name: currentUserName }} />
             </div>
           </div>
+        )}
+        {/* Image Modal */}
+        {imageModalOpen && (
+          <>
+            {console.log('Modal open with image:', modalImageUrl)}
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+              <div
+                className="bg-white rounded-lg shadow-lg p-4 relative flex flex-col"
+                style={{ maxHeight: '98vh', overflowY: 'auto' }}
+              >
+                <button
+                  className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
+                  onClick={handleCloseImageModal}
+                  title="Close"
+                >
+                  &times;
+                </button>
+                <img
+                  src={modalImageUrl}
+                  alt="Full Size"
+                  className="max-h-[90vh] max-w-full object-contain mx-auto"
+                  style={{ display: 'block' }}
+                />
+              </div>
+            </div>
+          </>
         )}
         {deleteModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
