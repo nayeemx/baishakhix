@@ -20,6 +20,7 @@ import SideNavbar from './components/SideNavbar';
 import LeaveApproval from './pages/approvals/LeaveApproval';
 import ResetApprovals from './pages/settings/ResetApprovals';
 import SalesReports from './pages/reports/SalesReports';
+import SalereportAdmin from './pages/reports/SalereportAdmin';
 import ProductList from './pages/inventory/ProductList';
 import AddProduct from './pages/inventory/AddProduct';
 import BarCode from './pages/inventory/BarCode';
@@ -48,6 +49,7 @@ import { useLocation } from 'react-router-dom';
 import ManualStocks from './pages/Tools/ManualStocks';
 import FileManager from './pages/Tools/FileManager';
 import Faker from './pages/Tools/Faker';
+import PurchaseReport from './pages/reports/PurchaseReport';
 
 const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutes
 
@@ -254,6 +256,34 @@ const App = () => {
                 <SideNavbar isMobileMenuOpen={isMobileMenuOpen} closeMobileMenu={() => setIsMobileMenuOpen(false)} />
                 <div className="flex-1">
                   <SalesReports />
+                </div>
+              </div>
+              <Footer />
+            </>
+          </ProtectedRoute>
+        } />
+        <Route path='/report/admin-sale-report' element={
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
+            <>
+              <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
+              <div className="flex">
+                <SideNavbar isMobileMenuOpen={isMobileMenuOpen} closeMobileMenu={() => setIsMobileMenuOpen(false)} />
+                <div className="flex-1">
+                  <SalereportAdmin />
+                </div>
+              </div>
+              <Footer />
+            </>
+          </ProtectedRoute>
+        } />
+        <Route path='/report/purchase-report' element={
+          <ProtectedRoute allowedRoles={['super_user', 'admin', 'manager', 'sales_man', 'stock_boy', 't_staff']}>
+            <>
+              <Header onMobileMenuClick={() => setIsMobileMenuOpen(true)} />
+              <div className="flex">
+                <SideNavbar isMobileMenuOpen={isMobileMenuOpen} closeMobileMenu={() => setIsMobileMenuOpen(false)} />
+                <div className="flex-1">
+                  <PurchaseReport />
                 </div>
               </div>
               <Footer />

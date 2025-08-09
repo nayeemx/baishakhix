@@ -32,6 +32,8 @@ const pages = [
 
   // Report
   { key: "SaleReport", label: "Sale Report" },
+  { key: "AdminSaleReport", label: "Admin Sale Report" },
+  { key: "PurchaseReport", label: "Purchase Report" },
 
   // Inventory
   { key: "ProductList", label: "Product List" },
@@ -444,7 +446,7 @@ const UserRole = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 w-[100vw] xl:w-[82vw]">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">User Role Management</h1>
         <p className="text-gray-600 mt-2">Manage user roles and permissions</p>
@@ -702,7 +704,7 @@ const UserRole = () => {
       {/* --- Menu Access Modal --- */}
       {showMenuModal && menuUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg h-[96vh] overflow-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[96vw] max-w-lg h-[96vh] overflow-auto">
             <h2 className="text-xl font-bold mb-4">
               Menu Access for {menuUser.name}
             </h2>
@@ -753,7 +755,7 @@ const UserRole = () => {
 
       {showPermissionModal && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-4xl h-[94vh] overflow-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[96vw] max-w-4xl h-[94vh] overflow-auto">
             <h2 className="text-xl font-bold mb-4">
               Manage Permissions for {selectedUser.name}
             </h2>

@@ -41,6 +41,8 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
       icon: FaIcons.FaChartLine,
       children: [
         { name: 'Sale Report', icon: FaIcons.FaShoppingCart, path: '/report/sale-report' },
+        { name: 'Admin Sale Report', icon: FaIcons.FaShoppingCart, path: '/report/admin-sale-report' },
+        { name: 'Purchase Report', icon: FaIcons.FaShoppingBasket, path: '/report/purchase-report' },
       ],
     },
     {
@@ -130,6 +132,8 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
     'Leave Approval': 'LeaveApproval',
     'Reset Approval': 'ResetApproval',
     'Sale Report': 'SaleReport',
+    'Admin Sale Report': 'AdminSaleReport',
+    'Purchase Report': 'PurchaseReport',
     'Supplier Return': 'SupplierReturn',
     'Customer Return': 'CustomerReturn',
     'POS': 'POS',
@@ -258,7 +262,7 @@ const SideNavbar = ({ isMobileMenuOpen, closeMobileMenu }) => {
       {/* Desktop sidebar */}
       <div
         className={`
-          hidden md:flex md:static md:translate-x-0 md:w-64 h-full border-r flex-shrink-0 overflow-y-auto print:hidden flex-col
+          hidden md:flex md:static md:translate-x-0 md:w-64 h-auto border-r flex-shrink-0 overflow-y-auto print:hidden flex-col
           ${darkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'}
         `}
       >

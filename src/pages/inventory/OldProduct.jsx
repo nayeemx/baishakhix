@@ -21,10 +21,10 @@ import {
 import { FaFileCsv } from "react-icons/fa6";
 import OldunitList from '../../components/Inventory/OldunitList';
 import AddoldProductModal from '../../components/Inventory/AddoldProductModal';
-import GenericDeleteComponent from '../../components/GenericDeleteComponent'; // Add this import
-import { useSelector } from 'react-redux'; // Add this import
-import { MdVisibility, MdEdit, MdDelete } from "react-icons/md"; // Add icons for actions
-import ViewOldProductModal from '../../components/Inventory/ViewOldProductModal'; // <-- create and import this component
+import GenericDeleteComponent from '../../components/GenericDeleteComponent';
+import { useSelector } from 'react-redux';
+import { MdVisibility, MdEdit, MdDelete } from "react-icons/md";
+import ViewOldProductModal from '../../components/Inventory/ViewOldProductModal';
 import EditOldProductModal from '../../components/Inventory/EditOldProductModal';
 import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
 
@@ -101,7 +101,6 @@ const OldProduct = () => {
       brand: Array.from(new Set(products.map(p => p.brand).filter(Boolean))).sort(),
       origin: Array.from(new Set(products.map(p => p.origin).filter(Boolean))).sort(),
       bill_number: Array.from(new Set(products.map(p => p.bill_number).filter(Boolean))).sort(),
-      // No supplier for old products, but you can add if needed
     }
   }, [products])
 
@@ -131,6 +130,25 @@ const OldProduct = () => {
     return data
   }, [products, filters, globalFilter])
 
+  // Calculate totals for the current page
+  const allRows = useMemo(() => {
+    const startIdx = pageIndex * pageSize;
+    const endIdx = (pageIndex + 1) * pageSize;
+    return tableData.slice(startIdx, endIdx);
+  }, [tableData, pageIndex, pageSize]);
+
+  const totals = useMemo(() => {
+    const sum = (key) =>
+      allRows.reduce((acc, row) => {
+        const val = Number(row[key]);
+        return acc + (isNaN(val) ? 0 : val);
+      }, 0);
+    return {
+      quantity: sum('quantity'),
+      unit_price: sum('unit_price'),
+    };
+  }, [allRows]);
+
   const columns = useMemo(
     () => [
       {
@@ -148,14 +166,20 @@ const OldProduct = () => {
       { header: 'Old Barcode', accessorKey: 'old_barcode' },
       { header: 'Old SKU', accessorKey: 'old_sku' },
       { header: 'Quantity', accessorKey: 'quantity' },
-      { header: 'Retail Price', accessorKey: 'retail_price' },
-      { header: 'Created At', accessorKey: 'created_at' },
-      // Add Actions column
+      { header: 'Unit Price', accessorKey: 'unit_price' },
+      { 
+        header: 'Created At', 
+        accessorKey: 'created_at',
+        cell: ({ getValue }) => {
+          const date = getValue();
+          return date ? new Date(date).toLocaleDateString() : '-';
+        },
+      },
       {
         header: 'Actions',
         id: 'actions',
         cell: ({ row }) => (
-          <div className="flex gap-2">
+          <div className="flex gap-2 print-hide">
             <button
               className="p-1 rounded bg-blue-100 hover:bg-blue-200"
               title="View"
@@ -194,7 +218,7 @@ const OldProduct = () => {
         ),
       },
     ],
-    []
+    [canEdit, canDelete]
   )
 
   const table = useReactTable({
@@ -238,12 +262,14 @@ const OldProduct = () => {
   // CSV Export
   const handleExport = () => {
     const csvColumns = [
-      "SL", "product", "barcode", "sku", "old_barcode", "old_sku", "quantity", "retail_price", "created_at"
+      "SL", "product", "barcode", "sku", "old_barcode", "old_sku", "quantity", "unit_price", "created_at"
     ]
     const csvData = tableData.map((row, idx) => {
       const obj = csvColumns.reduce((acc, col) => {
         if (col === "SL") {
           acc["SL"] = idx + 1
+        } else if (col === "created_at") {
+          acc[col] = row[col] ? new Date(row[col]).toLocaleDateString() : ''
         } else {
           acc[col] = row[col] !== undefined ? row[col] : ""
         }
@@ -275,6 +301,26 @@ const OldProduct = () => {
       .finally(() => setSuppliersLoading(false));
   }, [showAddProductModal]);
 
+  // Report time for print
+  function getBDReportTimeString() {
+    const now = new Date();
+    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+    const bd = new Date(utc + 6 * 60 * 60000);
+    const days = [
+      'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    ];
+    const day = days[bd.getDay()];
+    const date = bd.getDate().toString().padStart(2, '0');
+    const month = bd.toLocaleString('en-US', { month: 'long' });
+    const year = bd.getFullYear();
+    let hour = bd.getHours();
+    const minute = bd.getMinutes().toString().padStart(2, '0');
+    const ampm = hour >= 12 ? 'P.M' : 'A.M';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    return `Generated Report: ${day} ${date} ${month} ${year} | ${hour}.${minute} ${ampm}`;
+  }
+
   if (isLoading) return (
     <div className="relative top-[40vh]">
       <Loader />
@@ -283,8 +329,8 @@ const OldProduct = () => {
   if (isError) return <div>Error: {error.message}</div>
 
   return (
-    <div className="p-4">
-      <div className="mb-4 flex items-center justify-between print-hide">
+    <div className="p-4 w-[100vw] xl:w-[82vw]">
+      <div className="mb-4 flex flex-col items-center space-y-4 md:flex-row md:justify-between md:space-y-0 print-hide">
         <h1 className="text-xl font-semibold">
           Old Products: {products.length}
         </h1>
@@ -323,19 +369,24 @@ const OldProduct = () => {
           </button>
         </div>
       </div>
-      {/* Filter Controls */}
+      <div className="print-report-time text-center text-sm sm:text-base font-medium mb-2 print:block hidden">
+        {getBDReportTimeString()}
+      </div>
+      <div className="print-header hidden print:block text-center text-lg font-bold mb-4">
+        Old Products ({products.length})
+      </div>
       <div>
         <input
           type="text"
           placeholder="Search..."
           value={globalFilter}
           onChange={e => debouncedSetGlobalFilter(e.target.value)}
-          className="border p-2 rounded w-full mb-4 print:hidden"
+          className="border p-2 rounded w-full mb-4 text-sm sm:text-base print:hidden"
         />
       </div>
       <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-2 print-hide">
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.category}
           onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}
         >
@@ -345,7 +396,7 @@ const OldProduct = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.type}
           onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
         >
@@ -355,7 +406,7 @@ const OldProduct = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.brand}
           onChange={e => setFilters(f => ({ ...f, brand: e.target.value }))}
         >
@@ -365,7 +416,7 @@ const OldProduct = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.origin}
           onChange={e => setFilters(f => ({ ...f, origin: e.target.value }))}
         >
@@ -375,7 +426,7 @@ const OldProduct = () => {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.bill_number}
           onChange={e => setFilters(f => ({ ...f, bill_number: e.target.value }))}
         >
@@ -386,26 +437,26 @@ const OldProduct = () => {
         </select>
         <input
           type="date"
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.fromDate}
           onChange={e => setFilters(f => ({ ...f, fromDate: e.target.value }))}
           placeholder="From Date"
         />
         <input
           type="date"
-          className="border p-2 rounded"
+          className="border p-2 rounded text-sm sm:text-base"
           value={filters.toDate}
           onChange={e => setFilters(f => ({ ...f, toDate: e.target.value }))}
           placeholder="To Date"
         />
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full border text-xs">
+      <div className="overflow-auto">
+        <table className="min-w-full border text-xs sm:text-sm print-table">
           <thead>
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map(header => (
-                  <th key={header.id} className="border px-2 py-1 text-left">
+                  <th key={header.id} className={`border px-2 py-1 text-left ${header.column.id === 'actions' ? 'print-hide' : ''}`}>
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -421,36 +472,42 @@ const OldProduct = () => {
             {table.getRowModel().rows.map(row => (
               <tr key={row.id}>
                 {row.getVisibleCells().map(cell => (
-                  <td key={cell.id} className="border px-2 py-1">
+                  <td key={cell.id} className={`border px-2 py-1 ${cell.column.id === 'actions' ? 'print-hide' : ''}`}>
                     {flexRender(cell.column?.columnDef?.cell ?? '', cell.getContext())}
                   </td>
                 ))}
               </tr>
             ))}
+            <tr className="font-bold bg-gray-100">
+              <td className="border px-2 py-1" colSpan={6}>Total (Carryover up to this page):</td>
+              <td className="border px-2 py-1">{totals.quantity}</td>
+              <td className="border px-2 py-1">{totals.unit_price}</td>
+              <td className="border px-2 py-1"></td>
+              <td className="border px-2 py-1 print-hide"></td>
+            </tr>
           </tbody>
         </table>
       </div>
-      {/* Pagination Controls */}
-      <div className="mt-4 flex items-center justify-between flex-wrap gap-2">
-        <div className="text-xs text-gray-500">
+      <div className="mt-4 flex flex-col items-center md:flex-row md:justify-between gap-2 print-hide">
+        <div className="text-xs sm:text-sm text-gray-500">
           Showing {table.getRowModel().rows.length} of {tableData.length} filtered products ({products.length} total)
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-col md:flex-row">
           <button
             onClick={() => setPageIndex(0)}
             disabled={pageIndex === 0}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'<<'}
           </button>
           <button
             onClick={() => setPageIndex(old => Math.max(0, old - 1))}
             disabled={pageIndex === 0}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'<'}
           </button>
-          <span>
+          <span className="text-xs sm:text-sm">
             Page{' '}
             <strong>
               {pageIndex + 1} of {table.getPageCount()}
@@ -463,27 +520,26 @@ const OldProduct = () => {
               max={table.getPageCount()}
               value={pageInput}
               onChange={e => setPageInput(e.target.value)}
-              className="border rounded w-12 p-1 text-center"
+              className="border rounded w-12 p-1 text-center text-xs sm:text-sm"
               placeholder="Go"
-              style={{ width: 50 }}
             />
           </form>
           <button
             onClick={() => setPageIndex(old => Math.min(table.getPageCount() - 1, old + 1))}
             disabled={pageIndex >= table.getPageCount() - 1}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'>'}
           </button>
           <button
             onClick={() => setPageIndex(table.getPageCount() - 1)}
             disabled={pageIndex >= table.getPageCount() - 1}
-            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50 hover:bg-gray-400"
           >
             {'>>'}
           </button>
           <select
-            className="border rounded p-1 ml-2"
+            className="border rounded p-1 text-xs sm:text-sm ml-2"
             value={pageSize}
             onChange={e => {
               const newSize = Number(e.target.value)
@@ -498,13 +554,11 @@ const OldProduct = () => {
               </option>
             ))}
           </select>
-          <span className="ml-2 text-xs text-gray-500">
+          <span className="ml-2 text-xs sm:text-sm text-gray-500">
             {table.getRowModel().rows.length} record(s) in this page
           </span>
         </div>
       </div>
-
-      {/* Modal for OldunitList */}
       {showOldUnitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-lg shadow-lg p-6 min-w-[900px] max-w-full max-h-[90vh] overflow-y-auto relative">
@@ -519,7 +573,6 @@ const OldProduct = () => {
           </div>
         </div>
       )}
-      {/* Modal for AddoldProductModal */}
       {showAddProductModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-lg shadow-lg p-6 min-w-[900px] max-w-full max-h-[98vh] overflow-y-auto relative">
@@ -545,7 +598,6 @@ const OldProduct = () => {
           </div>
         </div>
       )}
-      {/* Modal for ViewOldProductModal */}
       {viewOpen && viewProduct && (
         <ViewOldProductModal
           open={viewOpen}
@@ -553,7 +605,6 @@ const OldProduct = () => {
           product={viewProduct}
         />
       )}
-      {/* Modal for EditOldProductModal */}
       {editOpen && editProduct && (
         <EditOldProductModal
           open={editOpen}
@@ -561,7 +612,6 @@ const OldProduct = () => {
           product={editProduct}
         />
       )}
-      {/* Delete Modal */}
       <GenericDeleteComponent
         open={deleteOpen}
         setOpen={setDeleteOpen}
@@ -570,6 +620,55 @@ const OldProduct = () => {
         currentUser={currentUser}
         queryClient={{ invalidateQueries: () => {} }}
       />
+      <style>
+        {`
+          @media print {
+            .print-hide {
+              display: none !important;
+            }
+            .print-table {
+              width: 100% !important;
+              font-size: 12px !important;
+            }
+            th, td {
+              border: 1px solid #000 !important;
+              padding: 4px !important;
+            }
+            .print-header {
+              display: block !important;
+              text-align: center;
+              font-size: 18px;
+              font-weight: bold;
+              margin-bottom: 16px;
+            }
+            .print-report-time {
+              display: block !important;
+              text-align: center;
+              font-size: 15px;
+              font-weight: 500;
+              margin-bottom: 8px;
+            }
+          }
+          @media screen {
+            .print-header {
+              display: none;
+            }
+            .print-report-time {
+              display: none;
+            }
+          }
+          @media (max-width: 640px) {
+            table {
+              display: block;
+              overflow-x: auto;
+              white-space: nowrap;
+            }
+            th, td {
+              min-width: 80px;
+            }
+          }
+        `}
+      </style>
     </div>
   )
 }

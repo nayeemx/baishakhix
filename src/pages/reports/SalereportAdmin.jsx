@@ -371,7 +371,7 @@ const SalesReports = () => {
   }
 
   return (
-    <div className="w-[100vw] p-4 sm:p-6">
+    <div className="w-[100vw] xl:w-[82vw] p-4 sm:p-6">
       <h2 className="text-2xl sm:text-3xl font-bold mb-4">Sales Transactions</h2>
 
       {/* Summary Cards */}
@@ -683,6 +683,7 @@ const SalesReports = () => {
               <th className="p-2 sm:p-3 text-center">Qty</th>
               <th className="p-2 sm:p-3 text-right">Price</th>
               <th className="p-2 sm:p-3 text-right">Final</th>
+              <th className="p-2 sm:p-3 text-right">Profit</th>
               <th className="p-2 sm:p-3 text-left hidden sm:table-cell">Cashier</th>
               <th className="p-2 sm:p-3 actions">Actions</th>
             </tr>
@@ -690,6 +691,7 @@ const SalesReports = () => {
           <tbody>
             {filteredSales.map((sale, saleIndex) =>
               sale.items.map((item, i) => {
+                const profit = calculateProfit(item.retail_price, item.unit_price);
                 return (
                   <tr key={`${sale.id}-${i}`} className="border-t">
                     <td className="p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
@@ -721,6 +723,9 @@ const SalesReports = () => {
                     </td>
                     <td className="p-2 sm:p-3 text-right text-xs sm:text-sm">
                       ৳ {parseFloat(sale.total).toFixed(2)}
+                    </td>
+                    <td className="p-2 sm:p-3 text-right text-green-600 font-medium text-xs sm:text-sm">
+                      {profit.percent}% <br />৳ {profit.amount}
                     </td>
                     <td className="p-2 sm:p-3 text-xs sm:text-sm hidden sm:table-cell">{sale.staffName || "-"}</td>
                     <td className="p-2 sm:p-3 text-center relative actions">

@@ -264,10 +264,10 @@ const SupplierList = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 w-[104vw] xl:w-[82vw]">
       <h1 className="text-2xl font-bold mb-6">Supplier List</h1>
       
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col md:flex-row space-y-4 justify-between items-center mb-4">
         {/* Search bar */}
         <div className="flex-grow relative mr-4">
           <input
@@ -336,7 +336,7 @@ const SupplierList = () => {
                   <td className="border px-3 py-2 cursor-pointer" onClick={() => handleSupplierClick(s)}>{s.address}</td>
                   <td className="border px-3 py-2 cursor-pointer" onClick={() => handleSupplierClick(s)}>{s.phone}</td>
                   <td className="border px-3 py-2 cursor-pointer" onClick={() => handleSupplierClick(s)}>{s.id}</td>
-                  <td className="border px-3 py-2">
+                  <td className="border px-3 py-2 flex">
                     <button
                       className="p-2 bg-blue-200 hover:bg-blue-300 rounded mr-2"
                       onClick={() => {

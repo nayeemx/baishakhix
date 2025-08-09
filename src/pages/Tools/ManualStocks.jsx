@@ -135,7 +135,7 @@ const ManualStocks = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div className="w-[100vw] md:w-[82vw] mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <FiUpload className="text-blue-500 text-3xl" />
