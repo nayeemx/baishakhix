@@ -42,13 +42,11 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
       const attendanceSnapshot = await getDocs(attendanceQuery);
       const allRecords = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-             // Filter records for this specific staff
-       const staffRecords = allRecords.filter(record => record.staffId === staff.id);
-       console.log('All records for month:', allRecords);
-       console.log('Staff records for', staff.name, ':', staffRecords);
-       setAttendanceRecords(staffRecords);
-      
-      
+      // Filter records for this specific staff
+      const staffRecords = allRecords.filter(record => record.staffId === staff.id);
+      console.log('All records for month:', allRecords);
+      console.log('Staff records for', staff.name, ':', staffRecords);
+      setAttendanceRecords(staffRecords);
     } catch (error) {
       console.error('Error fetching attendance records:', error);
     } finally {
@@ -124,7 +122,7 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
     const halfDays = attendanceRecords.filter(record => record.status === 'half_day').length;
     const lateDays = attendanceRecords.filter(record => record.isLate === true).length;
     
-    // Calculate leave balance with half-day consideration
+    // Calculate leave balance with half-day and leave type consideration
     const totalLeaves = 4; // Monthly allocation
     let usedLeaves = 0;
     const leaveRecords = attendanceRecords.filter(record => record.status === 'leave');
@@ -134,10 +132,13 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
       } else if (record.leaveType === 'half_day') {
         usedLeaves += 0.5; // Half day = 0.5 leave
       } else {
-        // Fallback: if leaveType is not specified, assume full day
-        usedLeaves += 1;
+        usedLeaves += 1; // Default to full day if leaveType is unspecified
       }
     });
+    
+    // Add half-day records (status-based deduction)
+    usedLeaves += halfDays * 0.5; // Each half-day adds 0.5 leave
+    
     const remainingLeaves = Math.max(0, totalLeaves - usedLeaves);
 
     const stats = {
@@ -269,32 +270,30 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                         {day}
                       </div>
                     ))}
-                                         {calendarDays.map((date, index) => {
-                       const attendance = getAttendanceForDate(date);
-                       const isCurrentMonth = dayjs(date).format('YYYY-MM') === currentMonth;
-                       const isToday = date === dayjs().format('YYYY-MM-DD');
-                       
-                       
-                       
-                       return (
-                         <div
-                           key={index}
-                           className={`min-h-[40px] flex items-center justify-center text-sm border border-gray-100 ${
-                             !isCurrentMonth ? 'text-gray-300' : 'text-gray-900'
-                           } ${isToday ? 'bg-blue-50 border-blue-200' : ''}`}
-                         >
-                           <div className="text-center">
-                             <div className="font-medium">{dayjs(date).format('D')}</div>
-                             {attendance && (
-                               <div 
-                                 className={`w-3 h-3 rounded-full mx-auto mt-1 ${getStatusColor(attendance.status)}`} 
-                                 title={`${dayjs(date).format('MMM DD')}: ${getStatusText(attendance.status)}`}
-                               ></div>
-                             )}
-                           </div>
-                         </div>
-                       );
-                     })}
+                    {calendarDays.map((date, index) => {
+                      const attendance = getAttendanceForDate(date);
+                      const isCurrentMonth = dayjs(date).format('YYYY-MM') === currentMonth;
+                      const isToday = date === dayjs().format('YYYY-MM-DD');
+                      
+                      return (
+                        <div
+                          key={index}
+                          className={`min-h-[40px] flex items-center justify-center text-sm border border-gray-100 ${
+                            !isCurrentMonth ? 'text-gray-300' : 'text-gray-900'
+                          } ${isToday ? 'bg-blue-50 border-blue-200' : ''}`}
+                        >
+                          <div className="text-center">
+                            <div className="font-medium">{dayjs(date).format('D')}</div>
+                            {attendance && (
+                              <div 
+                                className={`w-3 h-3 rounded-full mx-auto mt-1 ${getStatusColor(attendance.status)}`} 
+                                title={`${dayjs(date).format('MMM DD')}: ${getStatusText(attendance.status)}`}
+                              ></div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -328,33 +327,33 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                       </div>
                       <span className="text-lg font-bold text-gray-900">{stats.absentDays}</span>
                     </div>
-                                         <div className="flex items-center justify-between">
-                       <div className="flex items-center">
-                         <div className="w-3 h-3 bg-yellow-500 rounded-full mr-3"></div>
-                         <span className="text-sm text-gray-600">Leave Days</span>
-                       </div>
-                       <div className="text-right">
-                         <span className="text-lg font-bold text-gray-900">{stats.leaveDays}</span>
-                         <div className="text-xs text-gray-500">
-                           {stats.leaveDays}/{stats.totalLeaves} used
-                         </div>
-                       </div>
-                     </div>
-                     <div className="flex items-center justify-between">
-                       <div className="flex items-center">
-                         <div className="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
-                         <span className="text-sm text-gray-600">Leave Balance</span>
-                       </div>
-                       <span className={`text-lg font-bold ${
-                         stats.remainingLeaves === 0 
-                           ? 'text-red-600' 
-                           : stats.remainingLeaves <= 1 
-                             ? 'text-yellow-600' 
-                             : 'text-green-600'
-                       }`}>
-                         {stats.remainingLeaves.toFixed(1)} remaining
-                       </span>
-                     </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-yellow-500 rounded-full mr-3"></div>
+                        <span className="text-sm text-gray-600">Leave Days</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-lg font-bold text-gray-900">{stats.leaveDays}</span>
+                        <div className="text-xs text-gray-500">
+                          {stats.usedLeaves.toFixed(1)}/{stats.totalLeaves} used
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                        <span className="text-sm text-gray-600">Leave Balance</span>
+                      </div>
+                      <span className={`text-lg font-bold ${
+                        stats.remainingLeaves === 0 
+                          ? 'text-red-600' 
+                          : stats.remainingLeaves <= 1 
+                            ? 'text-yellow-600' 
+                            : 'text-green-600'
+                      }`}>
+                        {stats.remainingLeaves.toFixed(1)} remaining
+                      </span>
+                    </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
@@ -488,4 +487,4 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
   );
 };
 
-export default AttendanceModal; 
+export default AttendanceModal;

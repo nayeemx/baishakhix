@@ -229,7 +229,7 @@ const AttendanceList = () => {
       record.date >= monthStart && 
       record.date <= monthEnd
     );
-
+  
     console.log(`Monthly attendance for staff ${staffId}:`, {
       monthStart,
       monthEnd,
@@ -237,16 +237,25 @@ const AttendanceList = () => {
       staffRecords: monthRecords.length,
       records: monthRecords
     });
-
+  
     const presentDays = monthRecords.filter(record => record.status === 'present').length;
-    const leaveDays = monthRecords.filter(record => record.status === 'leave').length;
-    const halfDays = monthRecords.filter(record => record.status === 'half_day').length;
     const absentDays = monthRecords.filter(record => record.status === 'absent').length;
     const totalDays = dayjs(currentMonth).daysInMonth();
     
+    // Calculate leave days, including half-days as 0.5
+    let leaveDays = 0;
+    monthRecords.forEach(record => {
+      if (record.status === 'leave') {
+        leaveDays += record.leaveType === 'half_day' ? 0.5 : 1;
+      } else if (record.status === 'half_day') {
+        leaveDays += 0.5;
+      }
+    });
+    const halfDays = monthRecords.filter(record => record.status === 'half_day').length;
+    
     // Calculate percentage based on present days only
     const percentage = Math.round((presentDays / totalDays) * 100);
-
+  
     const result = { 
       presentDays, 
       leaveDays, 
@@ -274,7 +283,15 @@ const AttendanceList = () => {
       record.date <= monthEnd
     );
     
-    // Calculate used leaves with half-day consideration
+    // Get all half-day records for this staff in the current month
+    const staffHalfDayRecords = attendanceRecords.filter(record => 
+      record.staffId === staffId && 
+      record.status === 'half_day' && 
+      record.date >= monthStart && 
+      record.date <= monthEnd
+    );
+    
+    // Calculate used leaves with half-day and leave type consideration
     let usedLeaves = 0;
     staffLeaveRecords.forEach(record => {
       if (record.leaveType === 'full_day') {
@@ -282,10 +299,12 @@ const AttendanceList = () => {
       } else if (record.leaveType === 'half_day') {
         usedLeaves += 0.5; // Half day = 0.5 leave
       } else {
-        // Fallback: if leaveType is not specified, assume full day
-        usedLeaves += 1;
+        usedLeaves += 1; // Default to full day if leaveType is unspecified
       }
     });
+    
+    // Add half-day records (status-based deduction)
+    usedLeaves += staffHalfDayRecords.length * 0.5; // Each half-day adds 0.5 leave
     
     const totalLeaves = 4; // Monthly allocation
     const remainingLeaves = Math.max(0, totalLeaves - usedLeaves);
@@ -297,11 +316,8 @@ const AttendanceList = () => {
       totalLeaves,
       usedLeaves,
       remainingLeaves,
-      leaveRecords: staffLeaveRecords.map(r => ({ 
-        date: r.date, 
-        leaveType: r.leaveType, 
-        status: r.status 
-      })),
+      leaveRecords: staffLeaveRecords.map(r => ({ date: r.date, leaveType: r.leaveType, status: r.status })),
+      halfDayRecords: staffHalfDayRecords.map(r => ({ date: r.date, status: r.status })),
       allStaffRecords: attendanceRecords.filter(r => r.staffId === staffId).map(r => ({
         date: r.date,
         status: r.status,
@@ -687,83 +703,83 @@ const AttendanceList = () => {
         </div>
 
         {/* Individual Staff Attendance Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {staffList.map((staff) => {
-            const monthlyAttendance = getMonthlyAttendance(staff.id);
-            const leaveBalance = getLeaveBalance(staff.id);
-            
-            return (
-              <div key={staff.id} className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center mb-4">
-                  <div className="h-12 w-12 rounded-full bg-gray-300 flex items-center justify-center">
-                    <span className="text-lg font-medium text-gray-700">
-                      {staff.name?.split(' ').map(n => n[0]).join('').toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="ml-4">
-                    <h3 className="text-lg font-semibold text-gray-900">{staff.name}</h3>
-                    <p className="text-sm text-gray-600">{staff.role?.replace('_', ' ').toUpperCase()}</p>
-                  </div>
-                </div>
-                
-                <div className="text-center mb-4">
-                  <div className="text-3xl font-bold text-gray-900">{monthlyAttendance.percentage}%</div>
-                  <div className="text-sm text-gray-600">Attendance Rate</div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-100 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-green-800">{monthlyAttendance.presentDays}</div>
-                    <div className="text-xs text-green-600">Present</div>
-                  </div>
-                                     <div className="bg-yellow-100 rounded-lg p-3 text-center">
-                     <div className="text-lg font-bold text-yellow-800">{monthlyAttendance.leaveDays}</div>
-                     <div className="text-xs text-yellow-600">Leaves</div>
-                     <div className="text-xs text-yellow-700 mt-1">
-                       {leaveBalance.used.toFixed(1)}/4 used
-                     </div>
-                   </div>
-                  <div className="bg-red-100 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-red-800">{monthlyAttendance.absentDays}</div>
-                    <div className="text-xs text-red-600">Absent</div>
-                  </div>
-                                     <div className="bg-orange-100 rounded-lg p-3 text-center">
-                     <div className="text-lg font-bold text-orange-800">{monthlyAttendance.halfDays}</div>
-                     <div className="text-xs text-orange-600">Half Day</div>
-                   </div>
-                 </div>
-                 
-                 {/* Leave Balance Indicator */}
-                 <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                   <div className="flex items-center justify-between">
-                     <span className="text-sm font-medium text-blue-700">Leave Balance</span>
-                     <span className={`text-sm font-bold ${
-                       leaveBalance.remaining === 0 
-                         ? 'text-red-600' 
-                         : leaveBalance.remaining <= 1 
-                           ? 'text-yellow-600' 
-                           : 'text-green-600'
-                     }`}>
-                       {leaveBalance.remaining.toFixed(1)} remaining
-                     </span>
-                   </div>
-                   <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                     <div 
-                       className={`h-2 rounded-full ${
-                         leaveBalance.used >= 4 
-                           ? 'bg-red-500' 
-                           : leaveBalance.used >= 3 
-                             ? 'bg-yellow-500' 
-                             : 'bg-green-500'
-                       }`}
-                       style={{ width: `${(leaveBalance.used / 4) * 100}%` }}
-                     ></div>
-                   </div>
-                 </div>
-               </div>
-             );
-           })}
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  {staffList.map((staff) => {
+    const monthlyAttendance = getMonthlyAttendance(staff.id);
+    const leaveBalance = getLeaveBalance(staff.id);
+    
+    return (
+      <div key={staff.id} className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center mb-4">
+          <div className="h-12 w-12 rounded-full bg-gray-300 flex items-center justify-center">
+            <span className="text-lg font-medium text-gray-700">
+              {staff.name?.split(' ').map(n => n[0]).join('').toUpperCase()}
+            </span>
+          </div>
+          <div className="ml-4">
+            <h3 className="text-lg font-semibold text-gray-900">{staff.name}</h3>
+            <p className="text-sm text-gray-600">{staff.role?.replace('_', ' ').toUpperCase()}</p>
+          </div>
         </div>
+        
+        <div className="text-center mb-4">
+          <div className="text-3xl font-bold text-gray-900">{monthlyAttendance.percentage}%</div>
+          <div className="text-sm text-gray-600">Attendance Rate</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-green-100 rounded-lg p-3 text-center">
+            <div className="text-lg font-bold text-green-800">{monthlyAttendance.presentDays}</div>
+            <div className="text-xs text-green-600">Present</div>
+          </div>
+          <div className="bg-yellow-100 rounded-lg p-3 text-center">
+            <div className="text-lg font-bold text-yellow-800">{leaveBalance.used.toFixed(1)}</div>
+            <div className="text-xs text-yellow-600">Used Leaves</div>
+            <div className="text-xs text-yellow-700 mt-1">
+              {leaveBalance.used.toFixed(1)}/4 used
+            </div>
+          </div>
+          <div className="bg-red-100 rounded-lg p-3 text-center">
+            <div className="text-lg font-bold text-red-800">{monthlyAttendance.absentDays}</div>
+            <div className="text-xs text-red-600">Absent</div>
+          </div>
+          <div className="bg-orange-100 rounded-lg p-3 text-center">
+            <div className="text-lg font-bold text-orange-800">{monthlyAttendance.halfDays}</div>
+            <div className="text-xs text-orange-600">Half Day</div>
+          </div>
+        </div>
+        
+        {/* Leave Balance Indicator */}
+        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-blue-700">Leave Balance</span>
+            <span className={`text-sm font-bold ${
+              leaveBalance.remaining === 0 
+                ? 'text-red-600' 
+                : leaveBalance.remaining <= 1 
+                  ? 'text-yellow-600' 
+                  : 'text-green-600'
+            }`}>
+              {leaveBalance.remaining.toFixed(1)} remaining
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+            <div 
+              className={`h-2 rounded-full ${
+                leaveBalance.used >= 4 
+                  ? 'bg-red-500' 
+                  : leaveBalance.used >= 3 
+                    ? 'bg-yellow-500' 
+                    : 'bg-green-500'
+              }`}
+              style={{ width: `${(leaveBalance.used / 4) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    );
+  })}
+</div>
       </div>
 
       {/* Attendance Modal */}
