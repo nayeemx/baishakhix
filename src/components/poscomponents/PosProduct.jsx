@@ -398,7 +398,7 @@ const PosProduct = () => {
             <div className="font-semibold text-center text-base text-gray-800 mb-1">
               {product.product}
             </div>
-            <div className="flex items-center justify-between self-end w-[10vw]">
+            <div className="flex items-center justify-between md:self-end self-center w-[10vw]">
               <div className="text-green-600 text-xl font-bold">
                 ৳{product.retail_price}
               </div>

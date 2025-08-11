@@ -370,8 +370,12 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
 
-                {/* Attendance Overview Chart */}
+          <div className='flex flex-row-reverse items-center justify-between mt-6'>
+          {/* Attendance Overview Chart */}
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Attendance Overview</h4>
                   <div className="flex items-center justify-between mb-4">
@@ -408,10 +412,9 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              {/* Detailed Attendance Records */}
-              <div className="mt-6">
+
+                {/* Detailed Attendance Records */}
+              <div>
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Detailed Attendance Records</h4>
                   {attendanceRecords.length > 0 ? (
@@ -462,8 +465,7 @@ const AttendanceModal = ({ staff, selectedMonth, onClose }) => {
                   )}
                 </div>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-4 mt-6 pt-6 border-t border-gray-200">

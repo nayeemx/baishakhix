@@ -5,7 +5,7 @@ const POS = () => {
   return (
     <>
     {/* <div className="flex justify-between gap-2"> */}
-    <div className="flex flex-col-reverse md:flex-row gap-2 w-full h-full">
+    <div className="flex flex-col-reverse md:flex-row gap-2 h-full w-[100vw]">
       <div className="md:w-[76%] w-full">
         <PosProduct />
       </div>

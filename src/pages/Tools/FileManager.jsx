@@ -377,7 +377,7 @@ const FileManager = () => {
     : buildFolderTree(folders);
 
   return (
-    <div className="flex h-[80vh] bg-white rounded shadow overflow-hidden flex-col">
+    <div className="w-[100vw] md:w-[66.7vw] lg:w-[75vw] xl:w-[82.2vw] 2xl:w-[90vw] flex h-auto bg-white rounded shadow overflow-auto flex-col">
       {/* Breadcrumbs */}
       <div className="p-4 border-b bg-gray-50">
         <nav className="text-sm text-gray-600 flex items-center gap-2">
@@ -395,9 +395,9 @@ const FileManager = () => {
           ))}
         </nav>
       </div>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col lg:flex-row overflow-auto">
       {/* Sidebar: Folders */}
-      <div className="w-64 border-r p-4 bg-gray-50">
+      <div className="w-full lg:w-[18vw] border-r p-4 bg-gray-50">
         <div className="flex items-center justify-between mb-2">
           <span className="font-bold text-lg flex items-center gap-2"><FiFolder /> Folders</span>
           <button className="text-blue-600 flex items-center gap-1" onClick={() => setShowCreateFolder(v => !v)}><FiFolderPlus /> New</button>
@@ -427,7 +427,7 @@ const FileManager = () => {
       </div>
       {/* Main: Images and Subfolders */}
       <div className="flex-1 flex flex-col">
-        <div className="flex items-center gap-2 p-4 border-b bg-gray-100">
+        <div className="flex flex-col md:flex-row items-center gap-2 p-4 lg:p-2 border-b bg-gray-100">
           <label className="flex items-center gap-2 cursor-pointer">
             <FiUpload />
             <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} disabled={uploading || !currentFolder} />
@@ -478,7 +478,7 @@ const FileManager = () => {
           ))}
         </div>
         {/* Images */}
-        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 auto-rows-min" style={{ alignItems: 'start' }}>
+        <div className="flex-1 overflow-y-auto p-4 lg:p-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6 auto-rows-min" style={{ alignItems: 'start' }}>
           {filteredImages.length === 0 && filteredSubfolders.length === 0 && searchTerm && (
             <div className="col-span-full text-gray-400 text-center py-8">
               <div className="text-lg font-medium mb-2">No results found</div>
