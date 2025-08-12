@@ -751,31 +751,23 @@ const AttendanceList = () => {
         
         {/* Leave Balance Indicator */}
         <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-blue-700">Leave Balance</span>
-            <span className={`text-sm font-bold ${
-              leaveBalance.remaining === 0 
-                ? 'text-red-600' 
-                : leaveBalance.remaining <= 1 
-                  ? 'text-yellow-600' 
-                  : 'text-green-600'
-            }`}>
-              {leaveBalance.remaining.toFixed(1)} remaining
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-            <div 
-              className={`h-2 rounded-full ${
-                leaveBalance.used >= 4 
-                  ? 'bg-red-500' 
-                  : leaveBalance.used >= 3 
-                    ? 'bg-yellow-500' 
-                    : 'bg-green-500'
-              }`}
-              style={{ width: `${(leaveBalance.used / 4) * 100}%` }}
-            ></div>
-          </div>
-        </div>
+  <div className="flex items-center justify-between">
+    <span className="text-sm font-medium text-blue-700">Leave Balance</span>
+    <span className={`text-sm font-bold ${
+      leaveBalance.used >= 4 ? 'text-red-600' : leaveBalance.remaining <= 1 ? 'text-yellow-600' : 'text-green-600'
+    }`}>
+      {leaveBalance.used >= 4 ? `${leaveBalance.remaining.toFixed(1)} (Excess: ${(leaveBalance.used - 4).toFixed(1)})` : `${leaveBalance.remaining.toFixed(1)}`} remaining
+    </span>
+  </div>
+  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+    <div 
+      className={`h-2 rounded-full ${
+        leaveBalance.used >= 4 ? 'bg-red-500' : leaveBalance.used >= 3 ? 'bg-yellow-500' : 'bg-green-500'
+      }`}
+      style={{ width: `${Math.min((leaveBalance.used / 4) * 100, 100)}%` }}
+    ></div>
+  </div>
+</div>
       </div>
     );
   })}
