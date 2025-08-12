@@ -5,7 +5,10 @@ import {
   deleteDoc,
   addDoc,
   collection,
-  serverTimestamp
+  serverTimestamp,
+  getDocs,
+  query,
+  where
 } from 'firebase/firestore';
 import { firestore } from '../../firebase/firebase.config';
 import { FiX, FiClock, FiCalendar, FiUser, FiEdit3, FiTrash2 } from 'react-icons/fi';
@@ -32,6 +35,8 @@ const AttendanceEditModal = ({
   });
   const [loading, setLoading] = useState(false);
   const [isNewRecord, setIsNewRecord] = useState(false);
+  const [usedLeaves, setUsedLeaves] = useState(0);
+  const [proposedLeaves, setProposedLeaves] = useState(0);
 
   useEffect(() => {
     if (existingRecord) {
@@ -62,6 +67,59 @@ const AttendanceEditModal = ({
       setIsNewRecord(true);
     }
   }, [existingRecord]);
+
+  useEffect(() => {
+    if (formData.customLeave) {
+      const fetchUsedLeaves = async () => {
+        const monthStart = dayjs(selectedDate).startOf('month').format('YYYY-MM-DD');
+        const monthEnd = dayjs(selectedDate).endOf('month').format('YYYY-MM-DD');
+        let used = 0;
+
+        // Fetch leave status
+        const leaveQuery = query(
+          collection(firestore, 'attendance_records'),
+          where('staffId', '==', staff.id),
+          where('date', '>=', monthStart),
+          where('date', '<=', monthEnd),
+          where('status', '==', 'leave')
+        );
+        const leaveSnapshot = await getDocs(leaveQuery);
+        leaveSnapshot.forEach((doc) => {
+          const data = doc.data();
+          used += data.leaveType === 'half_day' ? 0.5 : 1;
+        });
+
+        // Fetch half_day status
+        const halfDayQuery = query(
+          collection(firestore, 'attendance_records'),
+          where('staffId', '==', staff.id),
+          where('date', '>=', monthStart),
+          where('date', '<=', monthEnd),
+          where('status', '==', 'half_day')
+        );
+        const halfDaySnapshot = await getDocs(halfDayQuery);
+        used += halfDaySnapshot.size * 0.5;
+
+        setUsedLeaves(used);
+      };
+      fetchUsedLeaves();
+    }
+  }, [formData.customLeave, staff.id, selectedDate]);
+
+  useEffect(() => {
+    if (formData.customLeave) {
+      let full = 0;
+      if (formData.startDate && formData.endDate) {
+        const start = dayjs(formData.startDate);
+        const end = dayjs(formData.endDate);
+        full = end.diff(start, 'day') + 1;
+      }
+      const half = formData.halfDays.filter(hd => hd.date).length * 0.5;
+      setProposedLeaves(full + half);
+    } else {
+      setProposedLeaves(0);
+    }
+  }, [formData.customLeave, formData.startDate, formData.endDate, formData.halfDays]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -422,6 +480,13 @@ const AttendanceEditModal = ({
                     </button>
                   </div>
                 ))}
+              </div>
+              <div className="bg-blue-50 p-3 rounded-lg space-y-1">
+                <p className="text-sm text-gray-700">Used leaves this month: {usedLeaves.toFixed(1)} / 4</p>
+                <p className="text-sm text-gray-700">Proposed leave: {proposedLeaves.toFixed(1)} days</p>
+                {usedLeaves + proposedLeaves > 4 && (
+                  <p className="text-sm text-red-600">Warning: This will exceed allocated leaves by {(usedLeaves + proposedLeaves - 4).toFixed(1)} days, which may affect next month's allocation.</p>
+                )}
               </div>
             </div>
           )}
