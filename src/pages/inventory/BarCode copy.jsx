@@ -74,45 +74,33 @@ const BarCode = () => {
   };
 
   const handleClear = async () => {
-    setLoading(true); // Show loading state during the operation
-    try {
-      // Fetch all products directly from Firestore
-      const snap = await getDocs(collection(firestore, 'products'));
-      const allProducts = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+    const productsToUpdate = products.filter(p => p.is_labeled === "f"); // Use full products state to find all "f" records
+    if (productsToUpdate.length === 0) {
+      console.log("No products to update.");
+      return;
+    }
 
-      // Find products with is_labeled = "f"
-      const productsToUpdate = allProducts.filter(p => p.is_labeled === "f");
-      if (productsToUpdate.length === 0) {
-        console.log("No products with is_labeled = 'f' to update.");
-        setLoading(false);
-        return;
-      }
+    console.log("Products to update (Firestore IDs):", productsToUpdate.map(p => p.id));
 
-      console.log("Products to update (Firestore IDs):", productsToUpdate.map(p => p.id));
-
-      // Update each product with is_labeled = "f" to "t"
-      for (const product of productsToUpdate) {
-        const productRef = doc(firestore, 'products', product.id);
+    // Update only products with is_labeled = "f" using Firestore document IDs
+    for (const product of productsToUpdate) {
+      try {
+        const productRef = doc(firestore, 'products', product.id); // Use Firestore document ID
         await updateDoc(productRef, { is_labeled: "t" });
         console.log(`Successfully updated document ${product.id}`);
+      } catch (error) {
+        console.error(`Error updating document ${product.id}:`, error);
       }
-
-      // Refresh the products state with the latest data
-      const updatedSnap = await getDocs(collection(firestore, 'products'));
-      const updatedProducts = updatedSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })).filter(p => p.barcode && p.is_labeled !== undefined && p.quantity !== undefined);
-      setProducts(updatedProducts);
-      console.log("Products refreshed after clear.");
-    } catch (error) {
-      console.error("Error during clear operation:", error);
-    } finally {
-      setLoading(false); // Ensure loading state is cleared
     }
+
+    // Refresh products state after updates
+    const snap = await getDocs(collection(firestore, 'products'));
+    const updatedProducts = snap.docs.map(doc => ({
+      id: doc.id, // Firestore document ID
+      ...doc.data(),
+    })).filter(p => p.barcode && p.is_labeled !== undefined && p.quantity !== undefined);
+    setProducts(updatedProducts);
+    console.log("Products refreshed after clear.");
   };
 
   const handlePrint = () => {
