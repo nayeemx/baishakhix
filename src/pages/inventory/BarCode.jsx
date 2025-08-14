@@ -9,8 +9,10 @@ import { RiQrCodeLine } from "react-icons/ri";
 import { FaPrint } from "react-icons/fa";
 import Loader from '../../components/Loader';
 import bLogo from '../../assets/icons/b.png';
+import { toast } from 'react-toastify';
 
 const PAGE_SIZE = 80;
+const LABELS_PER_PRINT_PAGE = 50;
 
 const BarCode = () => {
   const [products, setProducts] = useState([]);
@@ -26,7 +28,7 @@ const BarCode = () => {
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(firestore, 'products'), (snap) => {
       const allProducts = snap.docs.map(doc => ({
-        id: doc.id, // Firestore document ID
+        firestoreId: doc.id,
         ...doc.data(),
       })).filter(p => p.barcode && p.is_labeled !== undefined && p.quantity !== undefined);
       setProducts(allProducts);
@@ -39,7 +41,7 @@ const BarCode = () => {
   }, []);
 
   const filteredProducts = useMemo(() => {
-    let result = products.filter(p => p.is_labeled === "f"); // Only show products with is_labeled = "f"
+    let result = products.filter(p => p.is_labeled === "f");
     if (!search.trim()) return result;
     const s = search.trim().toLowerCase();
     return result.filter(
@@ -68,50 +70,38 @@ const BarCode = () => {
         textxalign: 'center',
         backgroundcolor: 'FFFFFF'
       });
-    } catch (err) {
+    } catch {
       // ignore rendering errors
     }
   };
 
   const handleClear = async () => {
-    setLoading(true); // Show loading state during the operation
+    setLoading(true);
     try {
-      // Fetch all products directly from Firestore
       const snap = await getDocs(collection(firestore, 'products'));
-      const allProducts = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const productsToUpdate = snap.docs
+        .map(doc => ({ firestoreId: doc.id, ...doc.data() }))
+        .filter(p => p.is_labeled === "f");
 
-      // Find products with is_labeled = "f"
-      const productsToUpdate = allProducts.filter(p => p.is_labeled === "f");
       if (productsToUpdate.length === 0) {
-        console.log("No products with is_labeled = 'f' to update.");
+        toast.info("No products to update.");
         setLoading(false);
         return;
       }
 
-      console.log("Products to update (Firestore IDs):", productsToUpdate.map(p => p.id));
+      await Promise.all(
+        productsToUpdate.map(product => {
+          const productRef = doc(firestore, 'products', product.firestoreId);
+          return updateDoc(productRef, { is_labeled: "t" });
+        })
+      );
 
-      // Update each product with is_labeled = "f" to "t"
-      for (const product of productsToUpdate) {
-        const productRef = doc(firestore, 'products', product.id);
-        await updateDoc(productRef, { is_labeled: "t" });
-        console.log(`Successfully updated document ${product.id}`);
-      }
-
-      // Refresh the products state with the latest data
-      const updatedSnap = await getDocs(collection(firestore, 'products'));
-      const updatedProducts = updatedSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })).filter(p => p.barcode && p.is_labeled !== undefined && p.quantity !== undefined);
-      setProducts(updatedProducts);
-      console.log("Products refreshed after clear.");
+      toast.success(`${productsToUpdate.length} products updated successfully!`);
     } catch (error) {
       console.error("Error during clear operation:", error);
+      toast.error("Failed to update products. Please try again.");
     } finally {
-      setLoading(false); // Ensure loading state is cleared
+      setLoading(false);
     }
   };
 
@@ -125,14 +115,42 @@ const BarCode = () => {
     }
     style.innerHTML = `
       @media print {
-        @page { size: A4 portrait; margin: 0; }
-        body { margin: 0 -14px !important; padding: 0 !important; background: #fff !important; }
-        .barcode-print-grid { display: grid !important; grid-template-columns: repeat(5, 1fr) !important; grid-auto-rows: 1fr !important; gap: 4px !important; width: 50vw !important; max-width: 50vw !important; padding: 4px !important; }
-        .barcode-print-label { border: 1px solid #000 !important; margin: 0 !important; padding: 2px !important; box-shadow: none !important; page-break-inside: avoid !important; min-height: 100px !important; min-width: 50px !important; font-size: 8px !important; background: #fff !important; }
-        .barcode-label-header { display: flex !important; justify-content: space-around !important; font-size: 10px !important; font-weight: bold !important; margin-bottom: 0px !important; width: 50% !important; }
-        .barcode-retail-price { font-size: 11px !important; font-weight: 600 !important; }
-        .barcode-print-label span, .barcode-print-label div { font-size: 8px !important; line-height: 1.1 !important; }
-        .barcode-print-label canvas { width: 50px !important; height: 50px !important; display: block !important; margin: 0 auto !important; image-rendering: crisp-edges !important; image-rendering: pixelated !important; }
+        @page { size: A4 portrait; margin: 0mm; }
+        body { background: #fff !important; }
+        .barcode-page {
+          display: block !important;
+          page-break-after: always !important;
+        }
+        .barcode-print-label {
+          display: inline-block !important;
+          vertical-align: top;
+          width: 11% !important; /* ~5 per row */
+          height: 133px !important;
+          margin: 1mm !important;
+          border: 1px solid #000 !important;
+          padding: 3px !important;
+          box-sizing: border-box;
+          page-break-inside: avoid !important;
+          background: #fff !important;
+          font-size: 10px !important;
+        }
+        .barcode-label-header {
+          font-size: 11px !important;
+          font-weight: bold !important;
+          text-align: center !important;
+        }
+        .barcode-retail-price {
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          text-align: center !important;
+          margin-top: 5px !important;
+        }
+        .barcode-print-label canvas {
+          width: 94% !important;
+          height: auto !important;
+          display: block !important;
+          margin: 0 auto !important;
+        }
         .no-print, .no-print * { display: none !important; }
       }
     `;
@@ -150,10 +168,16 @@ const BarCode = () => {
     );
   }
 
+  // Group labels into chunks of LABELS_PER_PRINT_PAGE for printing
+  const labelChunks = [];
+  for (let i = 0; i < paginatedProducts.length; i += LABELS_PER_PRINT_PAGE) {
+    labelChunks.push(paginatedProducts.slice(i, i + LABELS_PER_PRINT_PAGE));
+  }
+
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4 print:hidden">Product Barcodes</h2>
-      <div className="flex gap-2 mb-4 print:hidden">
+      <div className="flex flex-wrap gap-2 mb-4 print:hidden">
         <input
           type="text"
           placeholder="Search by Barcode, SKU, or Product Name"
@@ -179,133 +203,87 @@ const BarCode = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className="px-3 py-1 border rounded text-gray-700 bg-white hover:bg-gray-100 disabled:opacity-50"
-            onClick={() => setCurrentPage(1)}
-            disabled={currentPage === 1}
-          >
-            {'<<'}
-          </button>
-          <button
-            className="px-3 py-1 border rounded text-gray-700 bg-white hover:bg-gray-100 disabled:opacity-50"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            {'<'}
-          </button>
-          <span>
-            Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
-          </span>
-          <button
-            className="px-3 py-1 border rounded text-gray-700 bg-white hover:bg-gray-100 disabled:opacity-50"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            {'>'}
-          </button>
-          <button
-            className="px-3 py-1 border rounded text-gray-700 bg-white hover:bg-gray-100 disabled:opacity-50"
-            onClick={() => setCurrentPage(totalPages)}
-            disabled={currentPage === totalPages}
-          >
-            {'>>'}
-          </button>
+          <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-3 py-1 border rounded">{"<<"}</button>
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1 border rounded">{"<"}</button>
+          <span>Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></span>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border rounded">{">"}</button>
+          <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-3 py-1 border rounded">{">>"}</button>
         </div>
-        <button
-          type="button"
-          className="px-4 py-2 bg-red-700 text-white rounded flex items-center gap-2"
-          onClick={handleClear}
-        >
-          Clear
+        <button onClick={handleClear} className="px-4 py-2 bg-red-700 text-white rounded">Clear</button>
+        <button onClick={() => setShowBarcodeHistory(true)} className="px-4 py-2 bg-gray-700 text-white rounded flex items-center gap-2">
+          <MdHistory /> Barcode History
         </button>
-        <button
-          type="button"
-          className="px-4 py-2 bg-gray-700 text-white rounded flex items-center gap-2"
-          onClick={() => setShowBarcodeHistory(true)}
-        >
-          <MdHistory className="text-lg" />
-          Barcode History
+        <button onClick={() => setShowQrCode(true)} className="px-4 py-2 bg-purple-700 text-white rounded flex items-center gap-2">
+          <RiQrCodeLine /> QR Code
         </button>
-        <button
-          type="button"
-          className="px-4 py-2 bg-purple-700 text-white rounded flex items-center gap-2"
-          onClick={() => setShowQrCode(true)}
-        >
-          <RiQrCodeLine className="text-lg" />
-          QR Code
-        </button>
-        <button
-          type="button"
-          className="px-4 py-2 bg-green-700 text-white rounded flex items-center gap-2"
-          onClick={handlePrint}
-        >
-          <FaPrint className="text-lg" />
-          Print
+        <button onClick={handlePrint} className="px-4 py-2 bg-green-700 text-white rounded flex items-center gap-2">
+          <FaPrint /> Print
         </button>
       </div>
-      {showBarcodeHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[420px] max-w-full relative">
-            <button
-              className="absolute top-2 right-2 text-gray-500 hover:text-red-600 text-xl"
-              onClick={() => setShowBarcodeHistory(false)}
-              title="Close"
-            >
-              &times;
-            </button>
-            <BarcodeHistory />
+
+      {/* Print-ready chunked pages */}
+      <div ref={printAreaRef} className="print:block hidden">
+        {labelChunks.map((chunk, pageIndex) => (
+          <div key={pageIndex} className="barcode-page">
+            {chunk.flatMap((product, index) => {
+              const quantity = parseInt(product.quantity, 10) || 1;
+              return Array.from({ length: quantity }, (_, qIndex) => (
+                <div key={`${product.id}-${index}-${qIndex}`} className="barcode-print-label">
+                  <div className="barcode-label-header">
+                    {product.product_type || ''} {product.size || ''}
+                  </div>
+                  <canvas ref={canvas => canvas && product.barcode && renderBarcode(canvas, String(product.barcode))} />
+                  <div className="barcode-retail-price">
+                    BDT: {product.retail_price ?? ''}
+                  </div>
+                </div>
+              ));
+            })}
           </div>
-        </div>
-      )}
-      {showQrCode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[420px] max-w-full relative">
-            <button
-              className="absolute top-2 right-2 text-gray-500 hover:text-red-600 text-xl"
-              onClick={() => setShowQrCode(false)}
-              title="Close"
-            >
-              &times;
-            </button>
-            <QrCode />
-          </div>
-        </div>
-      )}
-      <div ref={printAreaRef} className="barcode-print-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 print:-ml-[1vw] print:grid-cols-8 print:gap-2 gap-4">
+        ))}
+      </div>
+
+      {/* Screen view grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 print:hidden">
         {paginatedProducts.slice(0, labelsPerPage).flatMap((product, index) => {
           const quantity = parseInt(product.quantity, 10) || 1;
           return Array.from({ length: quantity }, (_, qIndex) => (
-            <div
-              key={`${product.id}-${index}-${qIndex}`}
-              className="barcode-print-label border rounded flex flex-col items-center p-2 bg-white shadow"
-            >
-              <div className="barcode-label-header text-xs text-gray-700 flex justify-around w-full">
+            <div key={`${product.id}-${index}-${qIndex}`} className="border rounded flex flex-col items-center p-2 bg-white shadow">
+              <div className="text-xs text-gray-700 flex justify-around w-full">
                 <span>{product.product_type || ''}</span>
-                <span className='ml-1'>{product.size || ''}</span>
+                <span>{product.size || ''}</span>
               </div>
-              <canvas
-                ref={canvas => {
-                  if (canvas && product.barcode) {
-                    renderBarcode(canvas, String(product.barcode));
-                  }
-                }}
-                className="w-[140px] h-[100px] print:w-[100px] print:h-[66px] mx-auto"
-              />
+              <canvas ref={canvas => canvas && product.barcode && renderBarcode(canvas, String(product.barcode))} className="w-[140px] h-[10vh]" />
               <div className="text-xs text-gray-500 flex flex-col items-center">
-                <span className="block text-xs text-center print:text-nowrap">
-                  {product.sku || ''}
-                </span>
-                <span className="block barcode-retail-price font-bold text-sm">
-                  BDT: {product.retail_price ?? ''}
-                </span>
+                <span>{product.sku || ''}</span>
+                <span className="font-bold text-sm">BDT: {product.retail_price ?? ''}</span>
               </div>
             </div>
           ));
         })}
       </div>
+
       {paginatedProducts.length === 0 && (
         <div className="text-center text-gray-500 mt-8">
           No products found
+        </div>
+      )}
+
+      {showBarcodeHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[420px] max-w-full relative">
+            <button onClick={() => setShowBarcodeHistory(false)} className="absolute top-2 right-2 text-gray-500 hover:text-red-600 text-xl">&times;</button>
+            <BarcodeHistory />
+          </div>
+        </div>
+      )}
+
+      {showQrCode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 min-w-[420px] max-w-full relative">
+            <button onClick={() => setShowQrCode(false)} className="absolute top-2 right-2 text-gray-500 hover:text-red-600 text-xl">&times;</button>
+            <QrCode />
+          </div>
         </div>
       )}
     </div>
