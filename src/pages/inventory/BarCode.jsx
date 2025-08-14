@@ -124,7 +124,7 @@ const BarCode = () => {
         .barcode-print-label {
           display: inline-block !important;
           vertical-align: top;
-          width: 11% !important; /* ~5 per row */
+          width: 15% !important; /* ~5 per row */
           height: 133px !important;
           margin: 1mm !important;
           border: 1px solid #000 !important;
@@ -146,7 +146,7 @@ const BarCode = () => {
           margin-top: 5px !important;
         }
         .barcode-print-label canvas {
-          width: 94% !important;
+          width: 92% !important;
           height: auto !important;
           display: block !important;
           margin: 0 auto !important;
