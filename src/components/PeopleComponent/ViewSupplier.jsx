@@ -8,7 +8,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { firestore } from "../../firebase/firebase.config";
-import SupplierTransaction from "./suppliertransaction";
+import SupplierTransaction from "./SupplierTransaction";
 import SupplierAdjustment from "./SupplierAdjustment";
 import { FaMoneyBillWave, FaSearch, FaInfoCircle, FaHistory, FaSlidersH, FaTimes } from "react-icons/fa";
 import Loader from "../Loader";
