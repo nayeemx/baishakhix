@@ -1,32 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { firestore, auth } from '../../firebase/firebase.config';
-import { collection, addDoc, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, where, doc, getDoc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { toast, ToastContainer } from 'react-toastify';
 import TiptapEditor from '../../components/TiptapEditor';
 import { Switch } from '@headlessui/react';
 import { useNavigate } from 'react-router-dom';
-import { MdInventory } from "react-icons/md";
-import UnitList from '../../components/Inventory/UnitList'; // adjust path as needed
+import { MdInventory } from 'react-icons/md';
+import UnitList from '../../components/Inventory/UnitList';
 import { usePermissions, PERMISSION_PAGES } from '../../utils/permissions';
+import AppLoader from '../../components/AppLoader';
 
 const dropdownFields = [
-  "item_type", "cosmatic_type", "product_category", "product_type", "brand",
-  "color", "design", "origin", "season", "size", "style", "stock_type"
+  'item_type', 'cosmatic_type', 'product_category', 'product_type', 'brand',
+  'color', 'design', 'origin', 'season', 'size', 'style', 'stock_type'
 ];
 
-// Normalize possible field name variations from Firestore docs
 const FIELD_ALIASES = {
-  product_type: ["product_type", "productType", "type"],
-  origin: ["origin"],
-  design: ["design", "pattern"],
-  color: ["color", "colour"],
-  size: ["size"],
-  season: ["season"],
-  style: ["style"],
-  cosmatic_type: ["cosmatic_type", "cosmetic_type", "cosmetics_type"],
-  item_type: ["item_type", "itemType", "category", "category_type"],
-  stock_type: ["stock_type", "stockType"],
-  brand: ["brand"],
+  product_type: ['product_type', 'productType', 'type'],
+  origin: ['origin'],
+  design: ['design', 'pattern'],
+  color: ['color', 'colour'],
+  size: ['size'],
+  season: ['season'],
+  style: ['style'],
+  cosmatic_type: ['cosmatic_type', 'cosmetic_type', 'cosmetics_type'],
+  item_type: ['item_type', 'itemType', 'category', 'category_type'],
+  stock_type: ['stock_type', 'stockType'],
+  brand: ['brand'],
 };
 
 const murukhhoOptions = [
@@ -39,8 +39,7 @@ const MAX_IMAGES = 6;
 const imgbbApiKey = import.meta.env.VITE_IMGBB_API_KEY;
 
 const AddProduct = () => {
-  const [isCosmeticMode, setIsCosmeticMode] = useState(false);
-  const [form, setForm] = useState({
+  const initialForm = {
     item_type: 'General',
     cosmatic_type: '',
     product_category: '',
@@ -68,8 +67,11 @@ const AddProduct = () => {
     supplier_id: '',
     sku: '',
     product: '',
-  });
+  };
+  const [isCosmeticMode, setIsCosmeticMode] = useState(false);
+  const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(true);
   const [error, setError] = useState('');
   const [unitOptions, setUnitOptions] = useState({});
   const [suppliersList, setSuppliersList] = useState([]);
@@ -84,32 +86,201 @@ const AddProduct = () => {
   const [showUnitList, setShowUnitList] = useState(false);
   const navigate = useNavigate();
   const { canCreate } = usePermissions();
+  const formRef = useRef({});
+
+  // Convert FileList to base64 for persistence
+  const filesToBase64 = async (files) => {
+    const base64Files = [];
+    for (const file of files) {
+      const base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ name: file.name, type: file.type, data: reader.result });
+        reader.readAsDataURL(file);
+      });
+      base64Files.push(base64);
+    }
+    return base64Files;
+  };
+
+  // Convert base64 back to File objects
+  const base64ToFiles = (base64Files) => {
+    return base64Files.map((base64) => {
+      const byteString = atob(base64.data.split(',')[1]);
+      const mimeString = base64.type;
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      return new File([ab], base64.name, { type: mimeString });
+    });
+  };
+
+  // Load draft from Firestore or localStorage on mount
+  useEffect(() => {
+    const loadDraft = async () => {
+      setIsLoadingDraft(true);
+      try {
+        if (auth.currentUser) {
+          const draftDoc = await getDoc(doc(firestore, 'user_drafts', auth.currentUser.uid));
+          if (draftDoc.exists()) {
+            const { form: savedForm, isCosmeticMode: savedMode, description: savedDesc, images: savedImages } = draftDoc.data();
+            const restoredForm = { ...initialForm, ...savedForm };
+            setForm(restoredForm);
+            setIsCosmeticMode(savedMode || false);
+            setDescription(savedDesc || '');
+            if (savedImages && savedImages.length > 0) {
+              const restoredFiles = base64ToFiles(savedImages);
+              setSelectedFiles(restoredFiles);
+            }
+            Object.keys(restoredForm).forEach(key => {
+              if (formRef.current[key]) {
+                formRef.current[key].value = restoredForm[key] || '';
+              }
+            });
+            setIsLoadingDraft(false);
+            return;
+          }
+        }
+        const savedDraft = localStorage.getItem('addProductDraft');
+        if (savedDraft) {
+          try {
+            const { form: savedForm, isCosmeticMode: savedMode, description: savedDesc, images: savedImages } = JSON.parse(savedDraft);
+            const restoredForm = { ...initialForm, ...savedForm };
+            setForm(restoredForm);
+            setIsCosmeticMode(savedMode || false);
+            setDescription(savedDesc || '');
+            if (savedImages && savedImages.length > 0) {
+              const restoredFiles = base64ToFiles(savedImages);
+              setSelectedFiles(restoredFiles);
+            }
+            Object.keys(restoredForm).forEach(key => {
+              if (formRef.current[key]) {
+                formRef.current[key].value = restoredForm[key] || '';
+              }
+            });
+          } catch (err) {
+            console.error('Error parsing localStorage draft:', err);
+            localStorage.removeItem('addProductDraft');
+            toast.error('Failed to load saved form data from local storage');
+          }
+        }
+      } catch (err) {
+        console.error('Error loading draft from Firestore:', err);
+        toast.error('Failed to load saved form data from server');
+      } finally {
+        setIsLoadingDraft(false);
+      }
+    };
+    loadDraft();
+  }, []);
+
+  // Save draft to Firestore and localStorage on changes
+  useEffect(() => {
+    const saveDraft = async () => {
+      if (isLoadingDraft) return;
+      const base64Files = await filesToBase64(selectedFiles);
+      const draftData = { form, isCosmeticMode, description, images: base64Files };
+      localStorage.setItem('addProductDraft', JSON.stringify(draftData));
+      if (auth.currentUser) {
+        try {
+          await setDoc(doc(firestore, 'user_drafts', auth.currentUser.uid), draftData);
+        } catch (err) {
+          console.error('Error saving draft to Firestore:', err);
+          toast.error('Failed to save form data to server');
+        }
+      }
+    };
+    saveDraft();
+  }, [form, isCosmeticMode, description, selectedFiles]);
+
+  // Handle logout to ensure draft is saved
+  useEffect(() => {
+    const handleLogout = async () => {
+      if (auth.currentUser) {
+        try {
+          const base64Files = await filesToBase64(selectedFiles);
+          await setDoc(doc(firestore, 'user_drafts', auth.currentUser.uid), {
+            form,
+            isCosmeticMode,
+            description,
+            images: base64Files,
+          });
+        } catch (err) {
+          console.error('Error saving draft on logout:', err);
+        }
+      }
+    };
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (!user) handleLogout();
+    });
+    return () => unsubscribe();
+  }, [form, isCosmeticMode, description, selectedFiles]);
+
+  // Restore image previews from selectedFiles
+  useEffect(() => {
+    if (selectedFiles.length > 0) {
+      const newPreviews = selectedFiles.map(file => URL.createObjectURL(file));
+      setImagePreviews(newPreviews);
+      return () => {
+        newPreviews.forEach(url => URL.revokeObjectURL(url));
+      };
+    } else {
+      setImagePreviews([]);
+    }
+  }, [selectedFiles]);
 
   // Reset form fields when switching modes
   const handleModeChange = (newMode) => {
     setIsCosmeticMode(newMode);
-    // Reset product-related fields when switching modes
-    setForm(prev => ({
-      ...prev,
-      item_type: newMode ? 'Cosmetic' : 'General',
-      cosmatic_type: '',
-      product_category: '',
-      product_type: '',
-      brand: '',
-      color: '',
-      design: '',
-      origin: '',
-      season: '',
-      size: '',
-      style: '',
-    }));
+    setForm(prev => {
+      const newForm = {
+        ...prev,
+        item_type: newMode ? 'Cosmetic' : 'General',
+        cosmatic_type: '',
+        product_category: '',
+        product_type: '',
+        brand: '',
+        color: '',
+        design: '',
+        origin: '',
+        season: '',
+        size: '',
+        style: '',
+        quantity: '',
+        original_qty: '',
+        total_price: '',
+        percentage: '',
+        product: '',
+        bill_number: '',
+        deal_amount: '',
+        paid_amount: '',
+        manufacture_date: '',
+        expiry_date: '',
+        sku: '',
+      };
+      Object.keys(newForm).forEach(key => {
+        if (formRef.current[key]) {
+          formRef.current[key].value = newForm[key] || '';
+        }
+      });
+      return newForm;
+    });
+    setImagePreviews([]);
+    setSelectedFiles([]);
+    setDescription('');
   };
 
   // Fetch suppliers
   useEffect(() => {
     const fetchSuppliers = async () => {
-      const snap = await getDocs(collection(firestore, 'supplier_list'));
-      setSuppliersList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      try {
+        const snap = await getDocs(collection(firestore, 'supplier_list'));
+        setSuppliersList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error('Error fetching suppliers:', error);
+        toast.error('Failed to load suppliers');
+      }
     };
     fetchSuppliers();
   }, []);
@@ -121,13 +292,7 @@ const AddProduct = () => {
         const unitsSnap = await getDocs(collection(firestore, 'product_units'));
         const options = {};
         const allUnits = unitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        console.log('All units fetched:', allUnits); // Debug log
         
-        // Show ALL units regardless of mode - no filtering
-        const unitsToUse = allUnits;
-        console.log('Using all units:', unitsToUse.length);
-        
-        // Populate dropdown options from all units
         const coerceToArray = (value) => {
           if (value == null) return [];
           if (Array.isArray(value)) return value;
@@ -137,8 +302,7 @@ const AddProduct = () => {
         dropdownFields.forEach(field => {
           const aliases = FIELD_ALIASES[field] || [field];
           const collected = [];
-          unitsToUse.forEach(unit => {
-            // pick first alias that exists
+          allUnits.forEach(unit => {
             for (const alias of aliases) {
               const raw = unit[alias];
               if (raw !== undefined && raw !== null) {
@@ -147,16 +311,26 @@ const AddProduct = () => {
                   .map(v => v.trim())
                   .filter(v => v.length > 0);
                 collected.push(...arr);
-                break; // move to next field for this unit
+                break;
               }
             }
           });
-          const uniqueSorted = Array.from(new Set(collected)).sort((a, b) => a.localeCompare(b));
-          options[field] = uniqueSorted;
+          options[field] = Array.from(new Set(collected)).sort((a, b) => a.localeCompare(b));
         });
         
         setUnitOptions(options);
-        console.log('Unit options loaded:', options); // Debug log
+        setForm(prev => {
+          const updatedForm = { ...prev };
+          dropdownFields.forEach(field => {
+            if (prev[field] && !options[field]?.includes(prev[field])) {
+              updatedForm[field] = '';
+              if (formRef.current[field]) {
+                formRef.current[field].value = '';
+              }
+            }
+          });
+          return updatedForm;
+        });
       } catch (error) {
         console.error('Error fetching product units:', error);
         toast.error('Failed to load product unit options');
@@ -165,41 +339,44 @@ const AddProduct = () => {
     fetchUnits();
   }, []);
 
-  // Barcode and SKU generation
+  // Real-time barcode generation
   useEffect(() => {
-    const getNextBarcode = async () => {
-      const productsRef = collection(firestore, 'products');
-      const q = query(productsRef, where('barcode', '>=', '19000'));
-      const snapshot = await getDocs(q);
-      const barcodes = snapshot.docs.map(doc => parseInt(doc.data().barcode)).filter(code => !isNaN(code));
+    const productsRef = collection(firestore, 'products');
+    const q = query(productsRef, where('barcode', '>=', '19000'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const barcodes = snapshot.docs
+        .map(doc => parseInt(doc.data().barcode))
+        .filter(code => !isNaN(code));
       const nextNumber = barcodes.length > 0 ? Math.max(...barcodes) + 1 : 19000;
       setGeneratedBarcode(nextNumber.toString());
-    };
-    getNextBarcode();
+    }, (error) => {
+      console.error('Error listening to barcode updates:', error);
+      toast.error('Failed to fetch next barcode');
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Helper for visible fields and label renaming, with requested order
+  // Helper for visible fields
   const getVisibleFields = () => {
     const baseFields = [
-      { name: "product_type", label: "Product Type" },
-      { name: "brand", label: "Brand" },
-      { name: "origin", label: "Origin" },
-      { name: "design", label: "Design" },
-      { name: "color", label: "Color" },
-      { name: "size", label: "Size" },
-      { name: "season", label: "Season" },
-      { name: "style", label: "Style" },
+      { name: 'product_type', label: 'Product Type' },
+      { name: 'brand', label: 'Brand' },
+      { name: 'origin', label: 'Origin' },
+      { name: 'design', label: 'Design' },
+      { name: 'color', label: 'Color' },
+      { name: 'size', label: 'Size' },
+      { name: 'season', label: 'Season' },
+      { name: 'style', label: 'Style' },
     ];
     
     if (isCosmeticMode) {
-      // Cosmetic mode: include brand, exclude color, design, style
       return [
-        { name: "product_type", label: "Product Type" },
-        { name: "cosmatic_type", label: "Cosmetic Type" },
-        { name: "brand", label: "Brand" },
-        { name: "origin", label: "Origin" },
-        { name: "size", label: "Size" },
-        { name: "season", label: "Season" },
+        { name: 'product_type', label: 'Product Type' },
+        { name: 'cosmatic_type', label: 'Cosmetic Type' },
+        { name: 'brand', label: 'Brand' },
+        { name: 'origin', label: 'Origin' },
+        { name: 'size', label: 'Size' },
+        { name: 'season', label: 'Season' },
       ];
     }
     
@@ -208,19 +385,17 @@ const AddProduct = () => {
 
   // SKU generation logic
   useEffect(() => {
-    const getFieldPart = (value = '', length = 1) => value ? value.split('-')[0].slice(0, length).toUpperCase() : '';
+    const getFieldPart = (value = '', length = 1) => (value ? value.split('-')[0].slice(0, length).toUpperCase() : '');
     let sku = '';
     if (form.product_type && form.origin && form.size) {
       if (isCosmeticMode) {
-        // Cosmetic mode: CT-OP-SZ-B (e.g., 8Z-28A-5D2-01)
         sku = [
-          getFieldPart(form.cosmatic_type, 2), // e.g., "8Z"
-          getFieldPart(form.origin, 1) + getFieldPart(form.product_type, 3), // e.g., "2" + "8A" → "28A"
-          getFieldPart(form.season, 1) + getFieldPart(form.size, 3), // e.g., "5" + "D2" → "5D2"
-          getFieldPart(form.brand, 2) // e.g., "01"
+          getFieldPart(form.cosmatic_type, 2),
+          getFieldPart(form.origin, 1) + getFieldPart(form.product_type, 3),
+          getFieldPart(form.season, 1) + getFieldPart(form.size, 3),
+          getFieldPart(form.brand, 2)
         ].filter(Boolean).join('-');
       } else {
-        // General mode: PT-OD-CS-SS
         sku = [
           getFieldPart(form.product_type, 2),
           getFieldPart(form.origin, 1) + getFieldPart(form.design, 1),
@@ -237,6 +412,10 @@ const AddProduct = () => {
     if (form.quantity && form.unit_price) {
       const qty = parseFloat(form.quantity);
       const unitPrice = parseFloat(form.unit_price);
+      if (isNaN(qty) || isNaN(unitPrice)) {
+        setError('Invalid quantity or unit price');
+        return;
+      }
       const totalPrice = qty * unitPrice;
       const retailPrice = parseFloat(form.retail_price) || 0;
       setForm(prev => ({
@@ -245,6 +424,7 @@ const AddProduct = () => {
         original_qty: prev.original_qty || qty.toString(),
         percentage: retailPrice ? (((retailPrice - unitPrice) / unitPrice) * 100).toFixed(2) : ''
       }));
+      setError('');
     }
   }, [form.quantity, form.unit_price, form.retail_price]);
 
@@ -252,8 +432,13 @@ const AddProduct = () => {
   useEffect(() => {
     const fetchUser = async () => {
       if (!auth.currentUser) return;
-      const userDoc = await getDoc(doc(firestore, 'users', auth.currentUser.uid));
-      if (userDoc.exists()) setUserData(userDoc.data());
+      try {
+        const userDoc = await getDoc(doc(firestore, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) setUserData(userDoc.data());
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        toast.error('Failed to load user data');
+      }
     };
     fetchUser();
   }, []);
@@ -261,16 +446,14 @@ const AddProduct = () => {
   // Image input handler
   const handleImageInputChange = (e) => {
     const files = Array.from(e.target.files || []);
-    if (files.length > MAX_IMAGES) {
+    if (files.length + selectedFiles.length > MAX_IMAGES) {
       toast.error(`Maximum ${MAX_IMAGES} images allowed`);
       return;
     }
     setSelectedFiles(prev => [...prev, ...files].slice(0, MAX_IMAGES));
-    const newPreviews = files.map(file => URL.createObjectURL(file));
-    setImagePreviews(prev => [...prev, ...newPreviews]);
   };
 
-  // Upload images to ImgBB and return URLs
+  // Upload images to ImgBB
   const uploadImagesToImgBB = async (files) => {
     const urls = [];
     setUploading(true);
@@ -293,6 +476,7 @@ const AddProduct = () => {
       }
       return urls.join(',');
     } catch (err) {
+      console.error('Image upload error:', err);
       toast.error('Failed to upload one or more images');
       return '';
     } finally {
@@ -300,13 +484,16 @@ const AddProduct = () => {
     }
   };
 
-  // Form change handler
+  // Form change handler with ref updates
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
+    if (formRef.current[name]) {
+      formRef.current[name].value = value;
+    }
   };
 
-  // Submit handler
+  // Submit handler with validation
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!generatedBarcode || !generatedSku) {
@@ -317,9 +504,16 @@ const AddProduct = () => {
       toast.error('You must be logged in to add products');
       return;
     }
+    if (!form.supplier_id || !form.murukhho || !form.product) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+    if (isCosmeticMode && (!form.manufacture_date || !form.expiry_date)) {
+      toast.error('Manufacture and expiry dates are required for cosmetic products');
+      return;
+    }
     setLoading(true);
     try {
-      // Upload images
       const imageString = selectedFiles.length > 0 ? await uploadImagesToImgBB(selectedFiles) : '';
       const productData = {
         ...form,
@@ -327,6 +521,7 @@ const AddProduct = () => {
         sku: generatedSku,
         description,
         image: imageString,
+        is_labeled: 'f', // Automatically set is_labeled to "f"
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         created_by: userData?.name || auth.currentUser.email,
@@ -334,28 +529,54 @@ const AddProduct = () => {
       };
       await addDoc(collection(firestore, 'products'), productData);
       toast.success('Product added successfully!');
-      // Optionally reset form here
+      // Persist form data after submission by updating draft
+      const base64Files = await filesToBase64(selectedFiles);
+      const draftData = { form, isCosmeticMode, description, images: base64Files };
+      localStorage.setItem('addProductDraft', JSON.stringify(draftData));
+      if (auth.currentUser) {
+        await setDoc(doc(firestore, 'user_drafts', auth.currentUser.uid), draftData);
+      }
     } catch (err) {
+      console.error('Error adding product:', err);
       toast.error(err.message || 'Failed to add product');
     } finally {
       setLoading(false);
     }
   };
 
-  // Clean up preview URLs on unmount
-  useEffect(() => {
-    return () => {
-      imagePreviews.forEach(url => {
-        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-      });
-    };
-  }, [imagePreviews]);
+  // Clear form handler
+  const handleClearForm = async () => {
+    setForm(initialForm);
+    setDescription('');
+    setImagePreviews([]);
+    setSelectedFiles([]);
+    setIsCosmeticMode(false);
+    Object.keys(initialForm).forEach(key => {
+      if (formRef.current[key]) {
+        formRef.current[key].value = '';
+      }
+    });
+    localStorage.removeItem('addProductDraft');
+    if (auth.currentUser) {
+      try {
+        await deleteDoc(doc(firestore, 'user_drafts', auth.currentUser.uid));
+      } catch (err) {
+        console.error('Error clearing draft in Firestore:', err);
+        toast.error('Failed to clear form data on server');
+      }
+    }
+    toast.info('Form cleared');
+  };
+
+  // Render loading state while draft is being fetched
+  if (isLoadingDraft) {
+    return <AppLoader />;
+  }
 
   return (
     <div className="w-[98%] mx-auto bg-white rounded-lg shadow-lg p-6 h-[185vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold mb-4">Add Product</h2>
-        {/* Toggle switch for General/Cosmetic */}
         <div className="flex items-center gap-4 mb-6">
           <span className={`text-sm ${!isCosmeticMode ? 'font-bold' : ''}`}>General</span>
           <Switch
@@ -376,7 +597,6 @@ const AddProduct = () => {
       </div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          {/* Show generated SKU below the toggle or above the form */}
           {showCode && (
             <div className="flex items-center gap-4">
               <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded font-mono text-sm">
@@ -410,16 +630,22 @@ const AddProduct = () => {
               title="Manage Units"
               type="button"
             >
-              <MdInventory className='w-6 h-6' />
+              <MdInventory className="w-6 h-6" />
             </button>
           )}
+          <button
+            type="button"
+            className="bg-red-500 text-white px-4 py-2 rounded"
+            onClick={handleClearForm}
+          >
+            Clear Form
+          </button>
         </div>
       </div>
       {showUnitList && (
         <UnitList open={showUnitList} setOpen={setShowUnitList} />
       )}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* General Information */}
         <div>
           <h3 className="text-lg font-semibold mb-2 pb-2 border-b">General Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -429,6 +655,7 @@ const AddProduct = () => {
                 name="supplier_id"
                 value={form.supplier_id}
                 onChange={handleChange}
+                ref={el => (formRef.current.supplier_id = el)}
                 className="w-full border rounded p-2"
                 required
               >
@@ -440,15 +667,41 @@ const AddProduct = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Bill Number</label>
-              <input type="text" name="bill_number" value={form.bill_number} onChange={handleChange} className="w-full border rounded p-2" required />
+              <input
+                type="text"
+                name="bill_number"
+                value={form.bill_number}
+                onChange={handleChange}
+                ref={el => (formRef.current.bill_number = el)}
+                className="w-full border rounded p-2"
+                required
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Deal Amount</label>
-              <input type="number" step="0.01" name="deal_amount" value={form.deal_amount} onChange={handleChange} className="w-full border rounded p-2" required />
+              <input
+                type="number"
+                step="0.01"
+                name="deal_amount"
+                value={form.deal_amount}
+                onChange={handleChange}
+                ref={el => (formRef.current.deal_amount = el)}
+                className="w-full border rounded p-2"
+                required
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Paid Amount</label>
-              <input type="number" step="0.01" name="paid_amount" value={form.paid_amount} onChange={handleChange} className="w-full border rounded p-2" required />
+              <input
+                type="number"
+                step="0.01"
+                name="paid_amount"
+                value={form.paid_amount}
+                onChange={handleChange}
+                ref={el => (formRef.current.paid_amount = el)}
+                className="w-full border rounded p-2"
+                required
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Type</label>
@@ -456,6 +709,7 @@ const AddProduct = () => {
                 name="murukhho"
                 value={form.murukhho}
                 onChange={handleChange}
+                ref={el => (formRef.current.murukhho = el)}
                 className="w-full border rounded p-2"
                 required
               >
@@ -467,11 +721,9 @@ const AddProduct = () => {
             </div>
           </div>
         </div>
-        {/* Product Information */}
         <div>
           <h3 className="text-lg font-semibold mb-2 pb-2 border-b">Product Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Product Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
               <input
@@ -479,11 +731,11 @@ const AddProduct = () => {
                 name="product"
                 value={form.product || ''}
                 onChange={handleChange}
+                ref={el => (formRef.current.product = el)}
                 className="w-full border rounded p-2"
                 required
               />
             </div>
-            {/* Product Type, Origin, Design, Color, Size, Season, Style, Brand */}
             {getVisibleFields().map(field => (
               <div key={field.name}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
@@ -491,6 +743,7 @@ const AddProduct = () => {
                   name={field.name}
                   value={form[field.name] || ''}
                   onChange={handleChange}
+                  ref={el => (formRef.current[field.name] = el)}
                   className="w-full border rounded p-2"
                   required
                 >
@@ -503,29 +756,67 @@ const AddProduct = () => {
             ))}
           </div>
         </div>
-        {/* Transaction Details */}
         <div>
           <h3 className="text-lg font-semibold mb-2 pb-2 border-b">Transaction Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-              <input type="number" name="quantity" value={form.quantity} onChange={handleChange} className="w-full border rounded p-2" required />
+              <input
+                type="number"
+                name="quantity"
+                value={form.quantity}
+                onChange={handleChange}
+                ref={el => (formRef.current.quantity = el)}
+                className="w-full border rounded p-2"
+                required
+                min="1"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price</label>
-              <input type="number" step="0.01" name="unit_price" value={form.unit_price} onChange={handleChange} className="w-full border rounded p-2" required />
+              <input
+                type="number"
+                step="0.01"
+                name="unit_price"
+                value={form.unit_price}
+                onChange={handleChange}
+                ref={el => (formRef.current.unit_price = el)}
+                className="w-full border rounded p-2"
+                required
+                min="0"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Total Price</label>
-              <input type="text" value={form.total_price} className="w-full border rounded p-2 bg-gray-50" readOnly />
+              <input
+                type="text"
+                value={form.total_price}
+                className="w-full border rounded p-2 bg-gray-50"
+                readOnly
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Retail Price</label>
-              <input type="number" step="0.01" name="retail_price" value={form.retail_price} onChange={handleChange} className="w-full border rounded p-2" required />
+              <input
+                type="number"
+                step="0.01"
+                name="retail_price"
+                value={form.retail_price}
+                onChange={handleChange}
+                ref={el => (formRef.current.retail_price = el)}
+                className="w-full border rounded p-2"
+                required
+                min="0"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Percentage</label>
-              <input type="text" value={form.percentage ? `${form.percentage}%` : ''} className="w-full border rounded p-2 bg-gray-50" readOnly />
+              <input
+                type="text"
+                value={form.percentage ? `${form.percentage}%` : ''}
+                className="w-full border rounded p-2 bg-gray-50"
+                readOnly
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Manufacture Date{isCosmeticMode && ' *'}</label>
@@ -534,6 +825,7 @@ const AddProduct = () => {
                 name="manufacture_date"
                 value={form.manufacture_date}
                 onChange={handleChange}
+                ref={el => (formRef.current.manufacture_date = el)}
                 className="w-full border rounded p-2"
                 required={isCosmeticMode}
               />
@@ -545,13 +837,13 @@ const AddProduct = () => {
                 name="expiry_date"
                 value={form.expiry_date}
                 onChange={handleChange}
+                ref={el => (formRef.current.expiry_date = el)}
                 className="w-full border rounded p-2"
                 required={isCosmeticMode}
               />
             </div>
           </div>
         </div>
-        {/* Product Images */}
         <div>
           <h3 className="text-lg font-semibold mb-2 pb-2 border-b">Product Images</h3>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -580,7 +872,6 @@ const AddProduct = () => {
           </div>
           {uploading && <div className="text-blue-600 text-xs">Uploading...</div>}
         </div>
-        {/* Product Description */}
         <div>
           <h3 className="text-lg font-semibold mb-2 pb-2 border-b">Product Description</h3>
           <div className="border rounded-md">
@@ -595,7 +886,7 @@ const AddProduct = () => {
         )}
         <button
           type="submit"
-          className="bg-green-500 text-white px-4 py-2 rounded"
+          className="bg-green-500 text-white px-4 py-2 rounded disabled:bg-gray-400"
           disabled={!canCreate(PERMISSION_PAGES.ADD_PRODUCT) || loading}
           title={!canCreate(PERMISSION_PAGES.ADD_PRODUCT) ? 'You do not have permission to add products.' : ''}
         >

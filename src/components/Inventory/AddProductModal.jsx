@@ -339,6 +339,7 @@ const AddProductModal = ({ open, setOpen }) => {
         sku: uniqueSku,
         description,
         image: imageString,
+        is_labeled: 'f', // Automatically set is_labeled to "f"
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         created_by: userData?.name || auth.currentUser.email,
