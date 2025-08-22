@@ -139,11 +139,17 @@ const BarCode = () => {
           font-weight: bold !important;
           text-align: center !important;
         }
+        .barcode-sku {
+          font-size: 10px !important;
+          color: #666 !important;
+          text-align: center !important;
+          margin-top: 2px !important;
+        }
         .barcode-retail-price {
           font-size: 12px !important;
           font-weight: 600 !important;
           text-align: center !important;
-          margin-top: 5px !important;
+          margin-top: 2px !important;
         }
         .barcode-print-label canvas {
           width: 92% !important;
@@ -229,12 +235,17 @@ const BarCode = () => {
               const quantity = parseInt(product.quantity, 10) || 1;
               return Array.from({ length: quantity }, (_, qIndex) => (
                 <div key={`${product.id}-${index}-${qIndex}`} className="barcode-print-label">
-                  <div className="barcode-label-header">
-                    {product.product_type || ''} {product.size || ''}
+                  <div className="barcode-label-header flex justify-between">
+                    <span>{(product.product_type || '').slice(3, 8)}</span> <span>{product.size || ''}</span>
                   </div>
                   <canvas ref={canvas => canvas && product.barcode && renderBarcode(canvas, String(product.barcode))} />
-                  <div className="barcode-retail-price">
-                    BDT: {product.retail_price ?? ''}
+                  <div className="text-center">
+                    <div className="barcode-sku">
+                      SKU: {product.sku ?? ''}
+                    </div>
+                    <div className="barcode-retail-price">
+                      BDT: {product.retail_price ?? ''}
+                    </div>
                   </div>
                 </div>
               ));
@@ -249,13 +260,13 @@ const BarCode = () => {
           const quantity = parseInt(product.quantity, 10) || 1;
           return Array.from({ length: quantity }, (_, qIndex) => (
             <div key={`${product.id}-${index}-${qIndex}`} className="border rounded flex flex-col items-center p-2 bg-white shadow">
-              <div className="text-xs text-gray-700 flex justify-around w-full">
-                <span>{product.product_type || ''}</span>
+              <div className="text-xs text-gray-700 flex justify-between w-full">
+                <span>{(product.product_type || '').slice(3, 8)}</span>
                 <span>{product.size || ''}</span>
               </div>
               <canvas ref={canvas => canvas && product.barcode && renderBarcode(canvas, String(product.barcode))} className="w-[140px] h-[10vh]" />
               <div className="text-xs text-gray-500 flex flex-col items-center">
-                <span>{product.sku || ''}</span>
+                <span>{product.sku ?? ''}</span>
                 <span className="font-bold text-sm">BDT: {product.retail_price ?? ''}</span>
               </div>
             </div>
